@@ -17,7 +17,11 @@ interface AudioFile {
   created_at: string;
 }
 
-const AudioAnnouncementFiles: React.FC = () => {
+interface AudioAnnouncementFilesProps {
+  onDataChange?: () => void;
+}
+
+const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataChange }) => {
   const { addToast } = useToast();
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
   const [englishText, setEnglishText] = useState('');
@@ -100,6 +104,9 @@ const AudioAnnouncementFiles: React.FC = () => {
       setAudioFiles(prev => [result, ...prev]);
       setEnglishText('');
       setShowCreateModal(false);
+      
+      // Notify parent component about data change
+      onDataChange?.();
       
       addToast({
         type: 'success',
@@ -207,6 +214,9 @@ const AudioAnnouncementFiles: React.FC = () => {
       const result = await response.json();
       setAudioFiles(prev => prev.filter(file => file.id !== fileToDelete.id));
       
+      // Notify parent component about data change
+      onDataChange?.();
+      
       addToast({
         type: 'success',
         title: 'Audio File Deleted',
@@ -223,6 +233,41 @@ const AudioAnnouncementFiles: React.FC = () => {
     } finally {
       setShowDeleteModal(false);
       setFileToDelete(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (window.confirm('Are you sure you want to delete ALL audio files? This action cannot be undone and will permanently delete all audio files from the database and storage.')) {
+      try {
+        const response = await fetch(API_ENDPOINTS.audioFiles.deleteAll, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to delete all audio files');
+        }
+
+        const result = await response.json();
+        setAudioFiles([]);
+        
+        // Notify parent component about data change
+        onDataChange?.();
+        
+        addToast({
+          type: 'success',
+          title: 'All Audio Files Deleted',
+          message: `Successfully deleted ${result.total_records_deleted} audio file records and ${result.total_files_deleted} physical files from storage`
+        });
+        
+      } catch (error: any) {
+        console.error('Clear all error:', error);
+        addToast({
+          type: 'error',
+          title: 'Clear All Failed',
+          message: error.message || 'Failed to delete all audio files'
+        });
+      }
     }
   };
 
@@ -347,7 +392,7 @@ const AudioAnnouncementFiles: React.FC = () => {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Audio Announcement Files</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Audio Files</h1>
           <p className="text-gray-600 mt-1">Convert English text to audio files in multiple languages</p>
         </div>
         <div className="flex items-center space-x-2">
@@ -370,6 +415,15 @@ const AudioAnnouncementFiles: React.FC = () => {
             <FileAudio className="h-3 w-3" />
             <span>Create New Audio File</span>
           </button>
+          {audioFiles.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="flex items-center space-x-1 px-2 py-1 bg-red-600 text-white hover:bg-red-700 text-sm transition-colors"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>Clear All</span>
+            </button>
+          )}
         </div>
       </div>
 

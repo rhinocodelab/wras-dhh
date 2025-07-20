@@ -8,9 +8,10 @@ import * as XLSX from 'xlsx';
 
 interface StationManagementProps {
   onDataChange?: () => void;
+  onAudioChange?: () => void;
 }
 
-export default function StationManagement({ onDataChange }: StationManagementProps) {
+export default function StationManagement({ onDataChange, onAudioChange }: StationManagementProps) {
   const { addToast } = useToast();
   const [stations, setStations] = useState<Station[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -126,15 +127,46 @@ export default function StationManagement({ onDataChange }: StationManagementPro
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this station?')) {
+    if (window.confirm('Are you sure you want to delete this station? This will also delete any audio files generated for this station.')) {
       try {
+        // Find the station to get its name for audio file deletion
+        const station = stations.find(s => s.id === id);
+        
+        // Delete the station first
         await apiService.deleteStation(id);
+        
+        // Delete audio file for this station if it exists
+        if (station) {
+          try {
+            const response = await fetch(API_ENDPOINTS.audioFiles.deleteByText, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                english_text: station.station_name
+              }),
+            });
+            
+            if (response.ok) {
+              console.log(`Audio file deleted for station: ${station.station_name}`);
+            }
+          } catch (error) {
+            console.error(`Error deleting audio for station ${station.station_name}:`, error);
+            // Continue even if audio deletion fails
+          }
+        }
+        
         await fetchStations();
         onDataChange?.();
+        
+        // Notify that audio files have changed
+        onAudioChange?.();
+        
         addToast({
           type: 'success',
           title: 'Station Deleted',
-          message: 'Station has been deleted successfully'
+          message: 'Station has been deleted successfully along with its audio files'
         });
       } catch (error: any) {
         setError(error.message);
@@ -148,16 +180,68 @@ export default function StationManagement({ onDataChange }: StationManagementPro
   };
 
   const handleClearAll = async () => {
-    if (window.confirm('Are you sure you want to clear ALL stations? This action cannot be undone and will also clear any train routes that use these stations.')) {
+    if (window.confirm('Are you sure you want to clear ALL stations? This action cannot be undone and will also clear any train routes that use these stations. This will also delete all audio files generated for these stations.')) {
       try {
         setError(null);
+        
+        // First, get all stations to get their names for audio file deletion
+        const allStationsResponse = await apiService.getAllStations();
+        const allStations = allStationsResponse.stations || [];
+        
+        // Delete audio files for all stations using bulk deletion
+        let audioFilesDeleted = 0;
+        if (allStations.length > 0) {
+          try {
+            const stationNames = allStations.map((station: any) => station.station_name);
+            const response = await fetch(API_ENDPOINTS.audioFiles.deleteByTexts, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                english_texts: stationNames
+              }),
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              audioFilesDeleted = result.total_files_deleted;
+              console.log(`Deleted ${result.total_records_deleted} audio records and ${result.total_files_deleted} physical files for stations:`, result.matched_texts);
+              
+              // If no files were deleted, try aggressive cleanup
+              if (result.total_files_deleted === 0) {
+                console.log('No files deleted by text matching, trying aggressive cleanup...');
+                const cleanupResponse = await fetch(API_ENDPOINTS.audioFiles.cleanupStations, {
+                  method: 'DELETE',
+                });
+                
+                if (cleanupResponse.ok) {
+                  const cleanupResult = await cleanupResponse.json();
+                  audioFilesDeleted = cleanupResult.total_files_deleted;
+                  console.log(`Aggressive cleanup deleted ${cleanupResult.total_records_deleted} audio records and ${cleanupResult.total_files_deleted} physical files`);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error deleting audio files for stations:', error);
+            // Continue with clearing stations even if audio deletion fails
+          }
+        }
+        
+        // Now clear all stations
         await apiService.clearAllStations();
         await fetchStations();
         onDataChange?.();
+        
+        // Notify that audio files have changed
+        if (audioFilesDeleted > 0) {
+          onAudioChange?.();
+        }
+        
         addToast({
           type: 'success',
           title: 'All Stations Cleared',
-          message: 'All stations have been cleared successfully'
+          message: `All stations have been cleared successfully. ${audioFilesDeleted} audio files were also deleted.`
         });
       } catch (error: any) {
         setError(error.message);

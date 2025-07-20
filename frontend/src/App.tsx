@@ -19,6 +19,7 @@ function AppContent() {
   const [stations, setStations] = useState<Station[]>([]);
   const [routes, setRoutes] = useState<TrainRoute[]>([]);
   const [dashboardKey, setDashboardKey] = useState(0); // Force dashboard refresh
+  const [audioFilesKey, setAudioFilesKey] = useState(0); // Force audio files refresh
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -90,6 +91,10 @@ function AppContent() {
     fetchDashboardData();
   };
 
+  const refreshAudioFiles = () => {
+    setAudioFilesKey(prev => prev + 1);
+  };
+
   if (!user) {
     return (
       <Login
@@ -105,13 +110,13 @@ function AppContent() {
       case 'dashboard':
         return <Dashboard stationCount={stations.length} routeCount={routes.length} />;
       case 'stations':
-        return <StationManagement onDataChange={refreshDashboard} />;
+        return <StationManagement onDataChange={refreshDashboard} onAudioChange={refreshAudioFiles} />;
       case 'routes':
-        return <TrainRouteManagement onDataChange={refreshDashboard} />;
+        return <TrainRouteManagement onDataChange={refreshDashboard} onAudioChange={refreshAudioFiles} />;
       case 'templates':
         return <AnnouncementTemplates />;
       case 'audio-files':
-        return <AudioAnnouncementFiles />;
+        return <AudioAnnouncementFiles key={audioFilesKey} onDataChange={refreshDashboard} />;
       default:
         return <Dashboard stationCount={stations.length} routeCount={routes.length} />;
     }

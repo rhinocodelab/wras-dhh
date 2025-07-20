@@ -52,6 +52,10 @@ export const API_ENDPOINTS = {
     create: `${TRANSLATION_API_BASE_URL}/api/audio-files`,
     checkDuplicate: `${TRANSLATION_API_BASE_URL}/api/audio-files/check-duplicate`,
     delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}`,
+    deleteByText: `${TRANSLATION_API_BASE_URL}/api/audio-files/by-text`,
+    deleteByTexts: `${TRANSLATION_API_BASE_URL}/api/audio-files/by-texts`,
+    deleteAll: `${TRANSLATION_API_BASE_URL}/api/audio-files/all`,
+    cleanupStations: `${TRANSLATION_API_BASE_URL}/api/audio-files/cleanup-stations`,
     getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}`,
   },
   

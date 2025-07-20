@@ -298,7 +298,7 @@ export default function AnnouncementTemplates() {
       addToast({
         type: 'success',
         title: 'Audio Generation Started',
-        message: 'Audio files are being generated in the background. You can monitor progress in the Audio Announcement Files section.'
+        message: 'Audio files are being generated in the background. You can monitor progress in the Audio Files section.'
       });
 
       // Close modal after successful creation
@@ -844,7 +844,7 @@ export default function AnnouncementTemplates() {
                   <p>1. <strong>Select text</strong> from the template below by clicking and dragging</p>
                   <p>2. <strong>Click "Translate Selection"</strong> to get translations for the selected text</p>
                   <p>3. <strong>Review translations</strong> and click "Generate Audio" to create audio files</p>
-                  <p>4. <strong>Monitor progress</strong> in the Audio Announcement Files section</p>
+                  <p>4. <strong>Monitor progress</strong> in the Audio Files section</p>
                 </div>
               </div>
 
@@ -950,7 +950,7 @@ export default function AnnouncementTemplates() {
                       </div>
                       <p className="text-green-700 text-sm mb-4">
                         Audio files have been created and are being processed in the background. 
-                        You can view and manage them in the "Audio Announcement Files" section.
+                        You can view and manage them in the "Audio Files" section.
                       </p>
                       <div className="space-y-2">
                         <p className="text-sm text-green-600">
@@ -974,7 +974,7 @@ export default function AnnouncementTemplates() {
                         <p>• Audio files will be saved to <code className="bg-purple-100 px-1">/var/www/audio_files/</code></p>
                         <p>• Files will be accessible via Apache2 web server</p>
                         <p>• Processing happens in the background</p>
-                        <p>• You can monitor progress in the Audio Announcement Files section</p>
+                        <p>• You can monitor progress in the Audio Files section</p>
                       </div>
                     </div>
                   )}

@@ -179,9 +179,13 @@ def generate_audio_files_background(audio_file_id: int, english_text: str, db: S
         traceback.print_exc()
 
 from pydantic import BaseModel
+from typing import List
 
 class AudioFileRequest(BaseModel):
     english_text: str
+
+class AudioFileBulkDeleteRequest(BaseModel):
+    english_texts: List[str]
 
 @router.post("/")
 async def create_audio_file(
@@ -247,6 +251,379 @@ async def list_audio_files(db: Session = Depends(get_db)):
     ).order_by(AudioFile.created_at.desc()).all()
     
     return audio_files
+
+@router.delete("/all")
+async def delete_all_audio_files(db: Session = Depends(get_db)):
+    """Delete all audio files and their physical files"""
+    try:
+        # Get all active audio files
+        audio_files = db.query(AudioFile).filter(AudioFile.is_active == True).all()
+        
+        if not audio_files:
+            return {
+                "message": "No audio files found to delete",
+                "total_records_deleted": 0,
+                "total_files_deleted": 0
+            }
+        
+        total_records_deleted = 0
+        total_files_deleted = 0
+        audio_dir = "/var/www/audio_files"
+        
+        for audio_file in audio_files:
+            try:
+                # Get all audio file paths for this record
+                audio_paths = [
+                    audio_file.english_audio_path,
+                    audio_file.marathi_audio_path,
+                    audio_file.hindi_audio_path,
+                    audio_file.gujarati_audio_path
+                ]
+                
+                # Delete physical audio files
+                for audio_path in audio_paths:
+                    if audio_path:
+                        # Extract filename from path (remove /audio_files/ prefix)
+                        filename = audio_path.replace('/audio_files/', '')
+                        filepath = os.path.join(audio_dir, filename)
+                        
+                        if os.path.exists(filepath):
+                            try:
+                                os.remove(filepath)
+                                total_files_deleted += 1
+                                print(f"🗑️ Deleted audio file: {filename}")
+                            except PermissionError as e:
+                                print(f"❌ Permission error deleting file {filename}: {e}")
+                                # Try to fix permissions and retry
+                                try:
+                                    import stat
+                                    os.chmod(filepath, stat.S_IWRITE)
+                                    os.remove(filepath)
+                                    total_files_deleted += 1
+                                    print(f"🗑️ Deleted audio file after fixing permissions: {filename}")
+                                except Exception as retry_e:
+                                    print(f"❌ Failed to delete file {filename} even after fixing permissions: {retry_e}")
+                            except Exception as e:
+                                print(f"❌ Error deleting file {filename}: {e}")
+                        else:
+                            print(f"⚠️ Audio file not found: {filepath}")
+                
+                # Soft delete from database
+                audio_file.is_active = False
+                total_records_deleted += 1
+                
+            except Exception as e:
+                print(f"❌ Error processing audio file ID {audio_file.id}: {e}")
+                # Continue with other files even if one fails
+        
+        # Commit all changes
+        db.commit()
+        
+        # Log deletion summary
+        print(f"🗑️ Bulk deletion summary:")
+        print(f"   • Database records soft deleted: {total_records_deleted}")
+        print(f"   • Physical files deleted: {total_files_deleted}")
+        
+        return {
+            "message": "All audio files deleted successfully",
+            "total_records_deleted": total_records_deleted,
+            "total_files_deleted": total_files_deleted
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during bulk deletion: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete all audio files: {str(e)}")
+
+@router.delete("/by-text")
+async def delete_audio_file_by_text(request: AudioFileRequest, db: Session = Depends(get_db)):
+    """Delete an audio file by its English text and its physical files"""
+    if not request.english_text.strip():
+        raise HTTPException(status_code=400, detail="English text is required")
+    
+    audio_file = db.query(AudioFile).filter(
+        AudioFile.english_text == request.english_text.strip(),
+        AudioFile.is_active == True
+    ).first()
+    
+    if not audio_file:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    try:
+        # Get all audio file paths
+        audio_paths = [
+            audio_file.english_audio_path,
+            audio_file.marathi_audio_path,
+            audio_file.hindi_audio_path,
+            audio_file.gujarati_audio_path
+        ]
+        
+        # Delete physical audio files
+        audio_dir = "/var/www/audio_files"
+        deleted_files = []
+        
+        for audio_path in audio_paths:
+            if audio_path:
+                # Extract filename from path (remove /audio_files/ prefix)
+                filename = audio_path.replace('/audio_files/', '')
+                filepath = os.path.join(audio_dir, filename)
+                
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                        deleted_files.append(filename)
+                        print(f"🗑️ Deleted audio file: {filename}")
+                    except PermissionError as e:
+                        print(f"❌ Permission error deleting file {filename}: {e}")
+                        # Try to fix permissions and retry
+                        try:
+                            import stat
+                            os.chmod(filepath, stat.S_IWRITE)
+                            os.remove(filepath)
+                            deleted_files.append(filename)
+                            print(f"🗑️ Deleted audio file after fixing permissions: {filename}")
+                        except Exception as retry_e:
+                            print(f"❌ Failed to delete file {filename} even after fixing permissions: {retry_e}")
+                    except Exception as e:
+                        print(f"❌ Error deleting file {filename}: {e}")
+                else:
+                    print(f"⚠️ Audio file not found: {filepath}")
+        
+        # Soft delete from database
+        audio_file.is_active = False
+        db.commit()
+        
+        # Log deletion summary
+        print(f"🗑️ Deletion summary for audio file with text '{request.english_text}':")
+        print(f"   • Database record: Soft deleted")
+        print(f"   • Physical files deleted: {len(deleted_files)}")
+        print(f"   • Files: {', '.join(deleted_files) if deleted_files else 'None'}")
+        
+        return {
+            "message": "Audio file deleted successfully",
+            "total_files_deleted": len(deleted_files),
+            "english_text": request.english_text.strip()
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during deletion: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete audio file: {str(e)}")
+
+@router.delete("/by-texts")
+async def delete_audio_files_by_texts(request: AudioFileBulkDeleteRequest, db: Session = Depends(get_db)):
+    """Delete multiple audio files by their English texts and their physical files"""
+    if not request.english_texts:
+        raise HTTPException(status_code=400, detail="English texts list is required")
+    
+    # Clean and validate texts
+    cleaned_texts = [text.strip() for text in request.english_texts if text.strip()]
+    if not cleaned_texts:
+        raise HTTPException(status_code=400, detail="No valid English texts provided")
+    
+    # Debug: Log the texts we're looking for
+    print(f"🔍 Looking for audio files with texts: {cleaned_texts}")
+    
+    try:
+        # Find all audio files that match any of the provided texts
+        audio_files = db.query(AudioFile).filter(
+            AudioFile.english_text.in_(cleaned_texts),
+            AudioFile.is_active == True
+        ).all()
+        
+        # Debug: Log what we found
+        print(f"🔍 Found {len(audio_files)} matching audio files")
+        for audio_file in audio_files:
+            print(f"   • ID {audio_file.id}: '{audio_file.english_text}'")
+        
+        # Debug: Also check all active audio files to see what exists
+        all_active_files = db.query(AudioFile).filter(AudioFile.is_active == True).all()
+        print(f"🔍 Total active audio files in database: {len(all_active_files)}")
+        for file in all_active_files:
+            print(f"   • ID {file.id}: '{file.english_text}'")
+        
+        if not audio_files:
+            # If no exact matches found, try partial matching
+            print(f"🔍 No exact matches found, trying partial matching...")
+            partial_matches = []
+            for text in cleaned_texts:
+                # Find files that contain the text (case-insensitive)
+                partial_files = db.query(AudioFile).filter(
+                    AudioFile.english_text.ilike(f"%{text}%"),
+                    AudioFile.is_active == True
+                ).all()
+                partial_matches.extend(partial_files)
+            
+            # Remove duplicates
+            audio_files = list({file.id: file for file in partial_matches}.values())
+            print(f"🔍 Found {len(audio_files)} partial matches")
+            for audio_file in audio_files:
+                print(f"   • ID {audio_file.id}: '{audio_file.english_text}'")
+            
+            if not audio_files:
+                return {
+                    "message": "No audio files found matching the provided texts (exact or partial)",
+                    "total_records_deleted": 0,
+                    "total_files_deleted": 0,
+                    "matched_texts": []
+                }
+        
+        total_records_deleted = 0
+        total_files_deleted = 0
+        matched_texts = []
+        audio_dir = "/var/www/audio_files"
+        
+        for audio_file in audio_files:
+            try:
+                matched_texts.append(audio_file.english_text)
+                
+                # Get all audio file paths for this record
+                audio_paths = [
+                    audio_file.english_audio_path,
+                    audio_file.marathi_audio_path,
+                    audio_file.hindi_audio_path,
+                    audio_file.gujarati_audio_path
+                ]
+                
+                # Delete physical audio files
+                for audio_path in audio_paths:
+                    if audio_path:
+                        # Extract filename from path (remove /audio_files/ prefix)
+                        filename = audio_path.replace('/audio_files/', '')
+                        filepath = os.path.join(audio_dir, filename)
+                        
+                        if os.path.exists(filepath):
+                            try:
+                                os.remove(filepath)
+                                total_files_deleted += 1
+                                print(f"🗑️ Deleted audio file: {filename}")
+                            except PermissionError as e:
+                                print(f"❌ Permission error deleting file {filename}: {e}")
+                                # Try to fix permissions and retry
+                                try:
+                                    import stat
+                                    os.chmod(filepath, stat.S_IWRITE)
+                                    os.remove(filepath)
+                                    total_files_deleted += 1
+                                    print(f"🗑️ Deleted audio file after fixing permissions: {filename}")
+                                except Exception as retry_e:
+                                    print(f"❌ Failed to delete file {filename} even after fixing permissions: {retry_e}")
+                            except Exception as e:
+                                print(f"❌ Error deleting file {filename}: {e}")
+                        else:
+                            print(f"⚠️ Audio file not found: {filepath}")
+                
+                # Soft delete from database
+                audio_file.is_active = False
+                total_records_deleted += 1
+                
+            except Exception as e:
+                print(f"❌ Error processing audio file ID {audio_file.id}: {e}")
+                # Continue with other files even if one fails
+        
+        # Commit all changes
+        db.commit()
+        
+        # Log deletion summary
+        print(f"🗑️ Bulk text deletion summary:")
+        print(f"   • Database records soft deleted: {total_records_deleted}")
+        print(f"   • Physical files deleted: {total_files_deleted}")
+        print(f"   • Matched texts: {', '.join(matched_texts)}")
+        
+        return {
+            "message": "Audio files deleted successfully",
+            "total_records_deleted": total_records_deleted,
+            "total_files_deleted": total_files_deleted,
+            "matched_texts": matched_texts
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during bulk text deletion: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete audio files: {str(e)}")
+
+@router.delete("/cleanup-stations")
+async def cleanup_station_audio_files(db: Session = Depends(get_db)):
+    """Delete all audio files that might be related to stations (more aggressive cleanup)"""
+    try:
+        # Get all active audio files
+        all_audio_files = db.query(AudioFile).filter(AudioFile.is_active == True).all()
+        
+        if not all_audio_files:
+            return {
+                "message": "No audio files found to clean up",
+                "total_records_deleted": 0,
+                "total_files_deleted": 0
+            }
+        
+        total_records_deleted = 0
+        total_files_deleted = 0
+        audio_dir = "/var/www/audio_files"
+        
+        print(f"🧹 Starting aggressive cleanup of {len(all_audio_files)} audio files")
+        
+        for audio_file in all_audio_files:
+            try:
+                print(f"🧹 Processing audio file ID {audio_file.id}: '{audio_file.english_text}'")
+                
+                # Get all audio file paths for this record
+                audio_paths = [
+                    audio_file.english_audio_path,
+                    audio_file.marathi_audio_path,
+                    audio_file.hindi_audio_path,
+                    audio_file.gujarati_audio_path
+                ]
+                
+                # Delete physical audio files
+                for audio_path in audio_paths:
+                    if audio_path:
+                        # Extract filename from path (remove /audio_files/ prefix)
+                        filename = audio_path.replace('/audio_files/', '')
+                        filepath = os.path.join(audio_dir, filename)
+                        
+                        if os.path.exists(filepath):
+                            try:
+                                os.remove(filepath)
+                                total_files_deleted += 1
+                                print(f"🗑️ Deleted audio file: {filename}")
+                            except PermissionError as e:
+                                print(f"❌ Permission error deleting file {filename}: {e}")
+                                # Try to fix permissions and retry
+                                try:
+                                    import stat
+                                    os.chmod(filepath, stat.S_IWRITE)
+                                    os.remove(filepath)
+                                    total_files_deleted += 1
+                                    print(f"🗑️ Deleted audio file after fixing permissions: {filename}")
+                                except Exception as retry_e:
+                                    print(f"❌ Failed to delete file {filename} even after fixing permissions: {retry_e}")
+                            except Exception as e:
+                                print(f"❌ Error deleting file {filename}: {e}")
+                        else:
+                            print(f"⚠️ Audio file not found: {filepath}")
+                
+                # Soft delete from database
+                audio_file.is_active = False
+                total_records_deleted += 1
+                
+            except Exception as e:
+                print(f"❌ Error processing audio file ID {audio_file.id}: {e}")
+                # Continue with other files even if one fails
+        
+        # Commit all changes
+        db.commit()
+        
+        # Log deletion summary
+        print(f"🧹 Aggressive cleanup summary:")
+        print(f"   • Database records soft deleted: {total_records_deleted}")
+        print(f"   • Physical files deleted: {total_files_deleted}")
+        
+        return {
+            "message": "All audio files cleaned up successfully",
+            "total_records_deleted": total_records_deleted,
+            "total_files_deleted": total_files_deleted
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during aggressive cleanup: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clean up audio files: {str(e)}")
 
 @router.get("/{audio_file_id}")
 async def get_audio_file(audio_file_id: int, db: Session = Depends(get_db)):

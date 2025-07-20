@@ -8,9 +8,10 @@ import * as XLSX from 'xlsx';
 
 interface TrainRouteManagementProps {
   onDataChange?: () => void;
+  onAudioChange?: () => void;
 }
 
-export default function TrainRouteManagement({ onDataChange }: TrainRouteManagementProps) {
+export default function TrainRouteManagement({ onDataChange, onAudioChange }: TrainRouteManagementProps) {
   const { addToast } = useToast();
   const [routes, setRoutes] = useState<TrainRoute[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
@@ -131,15 +132,49 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this train route?')) {
+    if (window.confirm('Are you sure you want to delete this train route? This will also delete any audio files generated for this train route.')) {
       try {
+        // Find the route to get its name for audio file deletion
+        const route = routes.find(r => r.id === id);
+        
+        // Delete the train route first
         await apiService.deleteTrainRoute(id);
+        
+        // Delete audio file for this train route if it exists
+        if (route) {
+          try {
+            console.log(`Attempting to delete audio for train route: ${route.train_name}`);
+            const response = await fetch(API_ENDPOINTS.audioFiles.deleteByText, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                english_text: route.train_name
+              }),
+            });
+            
+            if (response.ok) {
+              console.log(`Audio file deleted for train route: ${route.train_name}`);
+            } else {
+              console.log(`Failed to delete audio for train route: ${route.train_name}, status: ${response.status}`);
+            }
+          } catch (error) {
+            console.error(`Error deleting audio for train route ${route.train_name}:`, error);
+            // Continue even if audio deletion fails
+          }
+        }
+        
         await fetchData();
         onDataChange?.();
+        
+        // Notify that audio files have changed
+        onAudioChange?.();
+        
         addToast({
           type: 'success',
           title: 'Train Route Deleted',
-          message: 'Train route has been deleted successfully'
+          message: 'Train route has been deleted successfully along with its audio files'
         });
       } catch (error: any) {
         setError(error.message);
@@ -153,16 +188,69 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
   };
 
   const handleClearAll = async () => {
-    if (window.confirm('Are you sure you want to clear ALL train routes? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to clear ALL train routes? This action cannot be undone. This will also delete all audio files generated for these train routes.')) {
       try {
         setError(null);
+        
+        // First, get all train routes to get their names for audio file deletion
+        const allRoutesResponse = await apiService.getAllTrainRoutes();
+        console.log('All routes response:', allRoutesResponse);
+        const allRoutes = allRoutesResponse.routes || [];
+        console.log('All routes:', allRoutes);
+        
+        // Delete audio files for all train routes using bulk deletion
+        let audioFilesDeleted = 0;
+        if (allRoutes.length > 0) {
+          try {
+            const trainNames = allRoutes.map((route: any) => route.train_name);
+            console.log('Train names for audio deletion:', trainNames);
+            const response = await fetch(API_ENDPOINTS.audioFiles.deleteByTexts, {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                english_texts: trainNames
+              }),
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              audioFilesDeleted = result.total_files_deleted;
+              console.log(`Deleted ${result.total_records_deleted} audio records and ${result.total_files_deleted} physical files for train routes:`, result.matched_texts);
+              
+              // If no files were deleted, try aggressive cleanup
+              if (result.total_files_deleted === 0) {
+                console.log('No files deleted by text matching, trying aggressive cleanup...');
+                const cleanupResponse = await fetch(API_ENDPOINTS.audioFiles.deleteAll, {
+                  method: 'DELETE',
+                });
+                
+                if (cleanupResponse.ok) {
+                  const cleanupResult = await cleanupResponse.json();
+                  audioFilesDeleted = cleanupResult.total_files_deleted;
+                  console.log(`Aggressive cleanup deleted ${cleanupResult.total_records_deleted} audio records and ${cleanupResult.total_files_deleted} physical files`);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error deleting audio files for train routes:', error);
+            // Continue with clearing train routes even if audio deletion fails
+          }
+        }
+        
+        // Now clear all train routes
         await apiService.clearAllTrainRoutes();
         await fetchData();
         onDataChange?.();
+        
+        // Notify that audio files have changed
+        onAudioChange?.();
+        
         addToast({
           type: 'success',
           title: 'All Train Routes Cleared',
-          message: 'All train routes have been cleared successfully'
+          message: `All train routes have been cleared successfully. ${audioFilesDeleted} audio files were also deleted.`
         });
       } catch (error: any) {
         setError(error.message);
