@@ -67,6 +67,33 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all train routes without pagination (for bulk operations)
+router.get('/all', authenticateToken, async (req, res) => {
+  try {
+    console.log('Fetching all train routes without pagination');
+    
+    const routes = await dbAll(`
+      SELECT 
+        tr.*,
+        s1.station_name as start_station_name,
+        s1.station_code as start_station_code,
+        s2.station_name as end_station_name,
+        s2.station_code as end_station_code
+      FROM train_routes tr
+      JOIN stations s1 ON tr.start_station_id = s1.id
+      JOIN stations s2 ON tr.end_station_id = s2.id
+      ORDER BY tr.train_number
+    `);
+    
+    console.log('Found routes:', routes.length);
+    
+    res.json({ routes });
+  } catch (error) {
+    console.error('Error fetching all train routes:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Create new train route
 router.post('/', authenticateToken, async (req, res) => {
   try {

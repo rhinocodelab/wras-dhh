@@ -171,6 +171,23 @@ class ApiService {
     }
   }
 
+  async getAllTrainRoutes() {
+    try {
+      const url = `${API_BASE_URL}/train-routes/all`;
+      console.log('API call to:', url);
+      
+      const response = await fetch(url, {
+        headers: this.getAuthHeaders(),
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  }
+
   async createTrainRoute(data: {
     train_number: string;
     train_name: string;

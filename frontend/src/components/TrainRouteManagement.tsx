@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Route, Search, ArrowRight, Upload, FileSpreadsheet, X, Trash } from 'lucide-react';
+import { Plus, Edit2, Trash2, Route, Search, ArrowRight, Upload, FileSpreadsheet, X, Trash, FileAudio, Flag } from 'lucide-react';
 import { TrainRoute, Station } from '../types';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContainer';
+import { API_ENDPOINTS } from '../config/api';
 import * as XLSX from 'xlsx';
 
 interface TrainRouteManagementProps {
@@ -29,6 +30,18 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
     end_station_id: ''
   });
   const [error, setError] = useState<string | null>(null);
+  const [generatingAudio, setGeneratingAudio] = useState<Set<number>>(new Set());
+  const [routesWithAudio, setRoutesWithAudio] = useState<Set<number>>(new Set());
+  const [isGeneratingAllAudio, setIsGeneratingAllAudio] = useState(false);
+  const [audioQueue, setAudioQueue] = useState<any[]>([]);
+  const [queueProgress, setQueueProgress] = useState({ current: 0, total: 0, isProcessing: false });
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [setupProgress, setSetupProgress] = useState({ 
+    isSettingUp: false, 
+    message: '', 
+    currentStep: 0, 
+    totalSteps: 3 
+  });
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -182,6 +195,506 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSearch();
+    }
+  };
+
+  // Check which routes have audio files
+  const checkRoutesWithAudio = async (trainNames: string[]) => {
+    try {
+      const routesWithAudioSet = new Set<number>();
+      
+      for (const trainName of trainNames) {
+        try {
+          const checkResponse = await fetch(API_ENDPOINTS.audioFiles.checkDuplicate, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: trainName
+            }),
+          });
+
+          if (checkResponse.ok) {
+            const checkResult = await checkResponse.json();
+            if (checkResult.has_duplicates) {
+              // Find the route with this train name and mark it as having audio
+              const route = routes.find(r => r.train_name === trainName);
+              if (route) {
+                routesWithAudioSet.add(route.id);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking audio for train ${trainName}:`, error);
+        }
+      }
+      
+      setRoutesWithAudio(routesWithAudioSet);
+    } catch (error) {
+      console.error('Error checking routes with audio:', error);
+    }
+  };
+
+  // Check audio status for current routes
+  useEffect(() => {
+    if (routes.length > 0) {
+      checkRoutesWithAudio(routes.map(r => r.train_name));
+    }
+  }, [routes]);
+
+  const handleGenerateAudio = async (route: TrainRoute) => {
+    try {
+      setGeneratingAudio(prev => new Set(prev).add(route.id));
+      
+      // Create audio file using the train name
+      const response = await fetch(API_ENDPOINTS.audioFiles.create, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          english_text: route.train_name
+        }),
+      });
+
+      if (response.ok) {
+        addToast({
+          type: 'success',
+          title: 'Audio Generation Started',
+          message: `Audio generation started for train "${route.train_name}"`
+        });
+        
+        // Update the routes with audio state
+        setRoutesWithAudio(prev => new Set(prev).add(route.id));
+      } else {
+        const errorData = await response.json();
+        if (response.status === 409) {
+          addToast({
+            type: 'warning',
+            title: 'Audio Already Exists',
+            message: `Audio for train "${route.train_name}" already exists`
+          });
+          setRoutesWithAudio(prev => new Set(prev).add(route.id));
+        } else {
+          throw new Error(errorData.error || 'Failed to generate audio');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error generating audio:', error);
+      addToast({
+        type: 'error',
+        title: 'Audio Generation Failed',
+        message: error.message || 'Failed to generate audio for train'
+      });
+    } finally {
+      setGeneratingAudio(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(route.id);
+        return newSet;
+      });
+    }
+  };
+
+  const processAudioQueueWithStations = async (routesToProcess: any[]) => {
+    if (routesToProcess.length === 0) {
+      return;
+    }
+    
+    if (queueProgress.isProcessing) {
+      return;
+    }
+
+    setQueueProgress(prev => ({ ...prev, isProcessing: true }));
+    setQueuePaused(false);
+    
+    let successCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    const batchSize = 5; // Process 5 routes at a time
+    const totalRoutes = routesToProcess.length;
+    
+    for (let i = 0; i < totalRoutes; i += batchSize) {
+      const batch = routesToProcess.slice(i, i + batchSize);
+      
+      // Process batch in parallel
+      const batchPromises = batch.map(async (route) => {
+        try {
+          // Check if audio already exists
+          const checkResponse = await fetch(API_ENDPOINTS.audioFiles.checkDuplicate, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: route.train_name
+            }),
+          });
+
+          if (checkResponse.ok) {
+            const checkResult = await checkResponse.json();
+            
+            if (checkResult.has_duplicates) {
+              return { status: 'skipped', route };
+            }
+          }
+
+          // Create audio file
+          const response = await fetch(API_ENDPOINTS.audioFiles.create, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: route.train_name
+            }),
+          });
+
+          if (response.ok) {
+            return { status: 'success', route };
+          } else {
+            return { status: 'error', route };
+          }
+        } catch (error) {
+          console.error(`Error processing route ${route.train_name}:`, error);
+          return { status: 'error', route };
+        }
+      });
+
+      // Wait for batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Update counts
+      batchResults.forEach(result => {
+        if (result.status === 'success') successCount++;
+        else if (result.status === 'skipped') skippedCount++;
+        else errorCount++;
+      });
+
+      // Update progress
+      setQueueProgress(prev => ({ 
+        ...prev, 
+        current: Math.min(i + batchSize, totalRoutes),
+        total: totalRoutes
+      }));
+
+      // Add delay between batches to prevent overwhelming the server
+      if (i + batchSize < totalRoutes) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if queue is paused
+        if (queuePaused) {
+          setQueueProgress(prev => ({ ...prev, isProcessing: false }));
+          return;
+        }
+      }
+    }
+
+    // Update routes with audio state
+    await checkRoutesWithAudio(routesToProcess.map(r => r.train_name));
+
+    // Show completion message
+    let message = '';
+    if (successCount > 0) {
+      message += `Successfully started audio generation for ${successCount} trains. `;
+    }
+    if (skippedCount > 0) {
+      message += `Skipped ${skippedCount} trains (audio already exists). `;
+    }
+    if (errorCount > 0) {
+      message += `${errorCount} trains failed to generate audio.`;
+    }
+
+    addToast({
+      type: successCount > 0 ? 'success' : 'warning',
+      title: 'Queue Processing Complete',
+      message: message.trim()
+    });
+
+    // Clear queue and reset progress
+    setAudioQueue([]);
+    setQueueProgress({ current: 0, total: 0, isProcessing: false });
+    setQueuePaused(false);
+    setGeneratingAudio(new Set());
+    setIsGeneratingAllAudio(false);
+  };
+
+  const processAudioQueue = async () => {
+    if (audioQueue.length === 0) {
+      return;
+    }
+    
+    if (queueProgress.isProcessing) {
+      return;
+    }
+
+    setQueueProgress(prev => ({ ...prev, isProcessing: true }));
+    setQueuePaused(false);
+    
+    let successCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    const batchSize = 5; // Process 5 routes at a time
+    const totalRoutes = audioQueue.length;
+    
+    for (let i = 0; i < totalRoutes; i += batchSize) {
+      const batch = audioQueue.slice(i, i + batchSize);
+      
+      // Process batch in parallel
+      const batchPromises = batch.map(async (route) => {
+        try {
+          // Check if audio already exists
+          const checkResponse = await fetch(API_ENDPOINTS.audioFiles.checkDuplicate, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: route.train_name
+            }),
+          });
+
+          if (checkResponse.ok) {
+            const checkResult = await checkResponse.json();
+            
+            if (checkResult.has_duplicates) {
+              return { status: 'skipped', route };
+            }
+          }
+
+          // Create audio file
+          const response = await fetch(API_ENDPOINTS.audioFiles.create, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: route.train_name
+            }),
+          });
+
+          if (response.ok) {
+            return { status: 'success', route };
+          } else {
+            return { status: 'error', route };
+          }
+        } catch (error) {
+          console.error(`Error processing route ${route.train_name}:`, error);
+          return { status: 'error', route };
+        }
+      });
+
+      // Wait for batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Update counts
+      batchResults.forEach(result => {
+        if (result.status === 'success') successCount++;
+        else if (result.status === 'skipped') skippedCount++;
+        else errorCount++;
+      });
+
+      // Update progress
+      setQueueProgress(prev => ({ 
+        ...prev, 
+        current: Math.min(i + batchSize, totalRoutes),
+        total: totalRoutes
+      }));
+
+      // Add delay between batches to prevent overwhelming the server
+      if (i + batchSize < totalRoutes) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if queue is paused
+        if (queuePaused) {
+          setQueueProgress(prev => ({ ...prev, isProcessing: false }));
+          return;
+        }
+      }
+    }
+
+    // Update routes with audio state
+    await checkRoutesWithAudio(audioQueue.map(r => r.train_name));
+
+    // Show completion message
+    let message = '';
+    if (successCount > 0) {
+      message += `Successfully started audio generation for ${successCount} trains. `;
+    }
+    if (skippedCount > 0) {
+      message += `Skipped ${skippedCount} trains (audio already exists). `;
+    }
+    if (errorCount > 0) {
+      message += `${errorCount} trains failed to generate audio.`;
+    }
+
+    addToast({
+      type: successCount > 0 ? 'success' : 'warning',
+      title: 'Queue Processing Complete',
+      message: message.trim()
+    });
+
+    // Clear queue and reset progress
+    setAudioQueue([]);
+    setQueueProgress({ current: 0, total: 0, isProcessing: false });
+    setQueuePaused(false);
+    setGeneratingAudio(new Set());
+    setIsGeneratingAllAudio(false);
+  };
+
+  const pauseQueue = () => {
+    setQueuePaused(true);
+    setQueueProgress(prev => ({ ...prev, isProcessing: false }));
+    addToast({
+      type: 'info',
+      title: 'Queue Paused',
+      message: 'Audio generation queue has been paused'
+    });
+  };
+
+  const resumeQueue = () => {
+    setQueuePaused(false);
+    processAudioQueue();
+    addToast({
+      type: 'info',
+      title: 'Queue Resumed',
+      message: 'Audio generation queue has been resumed'
+    });
+  };
+
+  const handleGenerateAudioForAll = async () => {
+    // Add timeout to prevent getting stuck
+    const setupTimeout = setTimeout(() => {
+      addToast({
+        type: 'error',
+        title: 'Setup Timeout',
+        message: 'Setup process took too long. Please try again.'
+      });
+      setIsGeneratingAllAudio(false);
+      setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+    }, 30000); // 30 second timeout
+
+    try {
+      setIsGeneratingAllAudio(true);
+      setSetupProgress({ 
+        isSettingUp: true, 
+        message: 'Initializing bulk audio generation...', 
+        currentStep: 1, 
+        totalSteps: 3 
+      });
+      
+      // Get all routes from all pages
+      setSetupProgress(prev => ({ 
+        ...prev, 
+        message: 'Fetching all train routes from database...', 
+        currentStep: 2 
+      }));
+      
+      // Small delay to show progress
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      let allRoutes;
+      
+      try {
+        console.log('Fetching all train routes from all pages...');
+        console.log('Current page routes count:', routes.length);
+        const allRoutesResponse = await apiService.getAllTrainRoutes();
+        console.log('API Response:', allRoutesResponse);
+        
+        if (!allRoutesResponse || !allRoutesResponse.routes) {
+          throw new Error('Invalid response from server: missing routes data');
+        }
+        
+        allRoutes = allRoutesResponse.routes;
+        console.log(`Successfully fetched ${allRoutes.length} train routes from all pages`);
+        console.log('First few routes:', allRoutes.slice(0, 3));
+      } catch (error) {
+        console.error('Failed to fetch all routes, falling back to current page routes:', error);
+        // Fallback to current page routes if getAllTrainRoutes fails
+        allRoutes = routes;
+        console.log(`Using fallback: ${allRoutes.length} routes from current page`);
+        
+        // Add a toast to inform user about fallback
+        addToast({
+          type: 'info',
+          title: 'Using Current Page',
+          message: 'Could not fetch all routes, using current page routes instead'
+        });
+      }
+      
+      if (allRoutes.length === 0) {
+        addToast({
+          type: 'warning',
+          title: 'No Routes Found',
+          message: 'There are no train routes to generate audio for'
+        });
+        setIsGeneratingAllAudio(false);
+        setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+        return;
+      }
+
+      // For now, let's add all routes to the queue and let the queue processor handle duplicates
+      // This is more efficient and avoids potential timeout issues during setup
+      setSetupProgress(prev => ({ 
+        ...prev, 
+        message: `Preparing queue with ${allRoutes.length} train routes from all pages...`, 
+        currentStep: 3 
+      }));
+      
+      // Small delay to show progress
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const routesToProcess = allRoutes;
+
+      if (routesToProcess.length === 0) {
+        addToast({
+          type: 'info',
+          title: 'No New Routes',
+          message: 'All routes already have audio files generated'
+        });
+        setIsGeneratingAllAudio(false);
+        setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+        return;
+      }
+
+      // Add routes to queue
+      setAudioQueue(routesToProcess);
+      setQueueProgress({ 
+        current: 0, 
+        total: routesToProcess.length, 
+        isProcessing: false 
+      });
+
+      addToast({
+        type: 'success',
+        title: 'Queue Created',
+        message: `${routesToProcess.length} train routes from all pages added to audio generation queue`
+      });
+
+      // Clear setup progress and start processing the queue
+      setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+      
+      // Use a longer delay and pass the routes directly to avoid state timing issues
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Pass routes directly to avoid state timing issues
+      processAudioQueueWithStations(routesToProcess);
+      
+      // Clear timeout on success
+      clearTimeout(setupTimeout);
+      
+    } catch (error: any) {
+      console.error('Error setting up audio queue:', error);
+      addToast({
+        type: 'error',
+        title: 'Queue Setup Failed',
+        message: error.message || 'Failed to set up audio generation queue'
+      });
+      setIsGeneratingAllAudio(false);
+      setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+      clearTimeout(setupTimeout);
     }
   };
 
@@ -374,13 +887,41 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
             <span>Import</span>
           </button>
           {routes.length > 0 && (
-            <button
-              onClick={handleClearAll}
-              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
-            >
-              <Trash className="h-3 w-3" />
-              <span>Clear All</span>
-            </button>
+            <>
+              <button
+                onClick={handleGenerateAudioForAll}
+                disabled={generatingAudio.size > 0 || isGeneratingAllAudio || queueProgress.isProcessing}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeneratingAllAudio ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                ) : (
+                  <FileAudio className="h-3 w-3" />
+                )}
+                <span>
+                  {isGeneratingAllAudio 
+                    ? (setupProgress.isSettingUp 
+                        ? `Setting up... (${setupProgress.currentStep}/${setupProgress.totalSteps})`
+                        : 'Setting up queue...'
+                      )
+                    : 'Generate Audio for All Trains'
+                  }
+                </span>
+              </button>
+              {queueProgress.isProcessing && (
+                <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-none text-sm">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                  <span>Queue: {queueProgress.current}/{queueProgress.total}</span>
+                </div>
+              )}
+              <button
+                onClick={handleClearAll}
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
+              >
+                <Trash className="h-3 w-3" />
+                <span>Clear All</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -431,6 +972,87 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
         </div>
       )}
 
+      {/* Setup Progress */}
+      {setupProgress.isSettingUp && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-purple-900">Setting Up Audio Generation</h4>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-purple-700">
+                Step {setupProgress.currentStep} of {setupProgress.totalSteps}
+              </span>
+              {setupProgress.isSettingUp && !queuePaused && (
+                <button
+                  onClick={pauseQueue}
+                  className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                >
+                  Pause
+                </button>
+              )}
+              {queuePaused && (
+                <button
+                  onClick={resumeQueue}
+                  className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                >
+                  Resume
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full bg-purple-200 rounded-full h-2">
+            <div 
+              className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(setupProgress.currentStep / setupProgress.totalSteps) * 100}%` }}
+            ></div>
+          </div>
+          <p className="text-sm text-purple-700 mt-2">
+            {setupProgress.message}
+          </p>
+        </div>
+      )}
+
+      {/* Queue Progress */}
+      {(queueProgress.isProcessing || queuePaused) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-blue-900">Audio Generation Queue</h4>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-blue-700">
+                {queueProgress.current} / {queueProgress.total} trains
+              </span>
+              {queueProgress.isProcessing && !queuePaused && (
+                <button
+                  onClick={pauseQueue}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Pause
+                </button>
+              )}
+              {queuePaused && (
+                <button
+                  onClick={resumeQueue}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Resume
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(queueProgress.current / queueProgress.total) * 100}%` }}
+            ></div>
+          </div>
+          <p className="text-sm text-blue-700 mt-2">
+            {queuePaused 
+              ? 'Queue is paused. Click Resume to continue.' 
+              : 'Processing trains in batches... Please wait.'
+            }
+          </p>
+        </div>
+      )}
+
       {/* Routes Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -457,9 +1079,16 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <Route className="h-5 w-5 text-gray-400 mr-3" />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{route.train_name}</div>
-                        <div className="text-sm text-gray-500">#{route.train_number}</div>
+                      <div className="flex items-center space-x-2">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{route.train_name}</div>
+                          <div className="text-sm text-gray-500">#{route.train_number}</div>
+                        </div>
+                        {routesWithAudio.has(route.id) && (
+                          <div title="Audio generated">
+                            <Flag className="h-4 w-4 text-green-600" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -481,6 +1110,18 @@ export default function TrainRouteManagement({ onDataChange }: TrainRouteManagem
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => handleGenerateAudio(route)}
+                        disabled={generatingAudio.has(route.id)}
+                        className="text-purple-600 hover:text-purple-900 p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Generate Audio"
+                      >
+                        {generatingAudio.has(route.id) ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+                        ) : (
+                          <FileAudio className="h-3 w-3" />
+                        )}
+                      </button>
                       <button
                         onClick={() => handleEdit(route)}
                         className="text-blue-600 hover:text-blue-900 p-0.5"
