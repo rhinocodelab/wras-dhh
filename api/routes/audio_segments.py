@@ -10,6 +10,7 @@ from ..models import AudioSegment, AnnouncementTemplate
 from ..services.translation_service import translate_text
 from ..services.tts_service import generate_speech
 from ..config import TTS_VOICES
+from ..utils.duplicate_checker import check_segment_duplicate
 
 router = APIRouter(prefix="/audio-segments", tags=["audio-segments"])
 
@@ -31,10 +32,19 @@ async def create_audio_segment(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
+    # Check if the same selected text already exists for this template
+    existing_segment = check_segment_duplicate(db, template_id, selected_text)
+    
+    if existing_segment:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Audio segment with this text already exists for this template (ID: {existing_segment.id})"
+        )
+    
     # Create audio segment
     segment = AudioSegment(
         template_id=template_id,
-        selected_text=selected_text,
+        selected_text=selected_text.strip(),
         start_position=start_position,
         end_position=end_position
     )

@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
   },
   stations: {
     list: `${MAIN_API_BASE_URL}/stations`,
+    all: `${MAIN_API_BASE_URL}/stations/all`,
     create: `${MAIN_API_BASE_URL}/stations`,
     update: (id: number) => `${MAIN_API_BASE_URL}/stations/${id}`,
     delete: (id: number) => `${MAIN_API_BASE_URL}/stations/${id}`,
@@ -38,6 +39,7 @@ export const API_ENDPOINTS = {
   templates: {
     list: `${TRANSLATION_API_BASE_URL}/api/templates`,
     create: `${TRANSLATION_API_BASE_URL}/api/templates`,
+    checkDuplicate: `${TRANSLATION_API_BASE_URL}/api/templates/check-duplicate`,
     update: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}`,
     delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}`,
     getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}`,
@@ -48,6 +50,7 @@ export const API_ENDPOINTS = {
   audioFiles: {
     list: `${TRANSLATION_API_BASE_URL}/api/audio-files`,
     create: `${TRANSLATION_API_BASE_URL}/api/audio-files`,
+    checkDuplicate: `${TRANSLATION_API_BASE_URL}/api/audio-files/check-duplicate`,
     delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}`,
     getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}`,
   },

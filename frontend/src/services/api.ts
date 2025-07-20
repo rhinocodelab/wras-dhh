@@ -68,6 +68,23 @@ class ApiService {
     }
   }
 
+  async getAllStations() {
+    try {
+      const url = `${MAIN_API_BASE_URL}/stations/all`;
+      console.log('API call to:', url);
+      
+      const response = await fetch(url, {
+        headers: this.getAuthHeaders(),
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  }
+
   async createStation(data: { station_name: string; station_code: string }) {
     try {
       const response = await fetch(`${API_BASE_URL}/stations`, {

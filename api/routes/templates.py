@@ -6,6 +6,7 @@ from datetime import datetime
 
 from database import get_db
 from models import AnnouncementTemplate
+from utils.duplicate_checker import check_template_duplicate, get_duplicate_summary
 
 router = APIRouter()
 
@@ -71,10 +72,19 @@ async def get_template(template_id: int, db: Session = Depends(get_db)):
 @router.post("/templates", response_model=TemplateResponse)
 async def create_template(template: TemplateCreate, db: Session = Depends(get_db)):
     """Create a new template"""
+    # Check if the same English text already exists
+    existing_template = check_template_duplicate(db, template.english_text)
+    
+    if existing_template:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Template with this English text already exists (ID: {existing_template.id}, Title: '{existing_template.title}')"
+        )
+    
     db_template = AnnouncementTemplate(
         category=template.category,
         title=template.title,
-        english_text=template.english_text,
+        english_text=template.english_text.strip(),
         marathi_text=template.marathi_text,
         hindi_text=template.hindi_text,
         gujarati_text=template.gujarati_text
@@ -83,6 +93,23 @@ async def create_template(template: TemplateCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(db_template)
     return db_template
+
+@router.post("/templates/check-duplicate")
+async def check_duplicate_template(
+    template: TemplateCreate,
+    db: Session = Depends(get_db)
+):
+    """Check if a template with the same English text already exists"""
+    if not template.english_text.strip():
+        raise HTTPException(status_code=400, detail="English text is required")
+    
+    duplicate_summary = get_duplicate_summary(db, template.english_text)
+    
+    return {
+        "text": template.english_text.strip(),
+        "has_duplicates": duplicate_summary["has_duplicates"],
+        "duplicates": duplicate_summary["duplicates"]
+    }
 
 @router.put("/templates/{template_id}", response_model=TemplateResponse)
 async def update_template(

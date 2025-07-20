@@ -82,6 +82,17 @@ const AudioAnnouncementFiles: React.FC = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle duplicate error specifically
+        if (response.status === 409) {
+          addToast({
+            type: 'warning',
+            title: 'Duplicate Text Found',
+            message: errorData.detail || 'This English text already exists in the database'
+          });
+          return;
+        }
+        
         throw new Error(errorData.detail || 'Failed to create audio file');
       }
 
@@ -196,15 +207,10 @@ const AudioAnnouncementFiles: React.FC = () => {
       const result = await response.json();
       setAudioFiles(prev => prev.filter(file => file.id !== fileToDelete.id));
       
-      // Show detailed deletion information
-      const deletedFilesList = result.deleted_files && result.deleted_files.length > 0 
-        ? `: ${result.deleted_files.join(', ')}`
-        : '';
-      
       addToast({
         type: 'success',
         title: 'Audio File Deleted',
-        message: `Successfully deleted audio file (ID: ${result.audio_file_id}) and ${result.total_files_deleted} audio files from storage${deletedFilesList}`
+        message: `Successfully deleted audio file and ${result.total_files_deleted} audio files from storage`
       });
       
     } catch (error: any) {
@@ -270,7 +276,7 @@ const AudioAnnouncementFiles: React.FC = () => {
           addToast({
             type: 'error',
             title: 'Audio File Not Found',
-            message: `Audio file not accessible at: ${fullAudioUrl}`
+            message: 'Audio file is not accessible. Please try again later.'
           });
           return;
         }
@@ -284,7 +290,7 @@ const AudioAnnouncementFiles: React.FC = () => {
           addToast({
             type: 'error',
             title: 'Audio Error',
-            message: `Failed to load audio: ${audioPath}. Check console for details.`
+            message: 'Failed to load audio file. Please try again later.'
           });
         });
         

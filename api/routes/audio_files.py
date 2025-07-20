@@ -16,6 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import get_db
 from models import AudioFile
 from config import Config
+from utils.duplicate_checker import check_audio_file_duplicate, get_duplicate_summary
 
 router = APIRouter(prefix="/audio-files", tags=["audio-files"])
 
@@ -192,6 +193,15 @@ async def create_audio_file(
     if not request.english_text.strip():
         raise HTTPException(status_code=400, detail="English text is required")
     
+    # Check if the same English text already exists
+    existing_audio_file = check_audio_file_duplicate(db, request.english_text)
+    
+    if existing_audio_file:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Audio file with this English text already exists (ID: {existing_audio_file.id})"
+        )
+    
     # Create audio file record
     audio_file = AudioFile(
         english_text=request.english_text.strip(),
@@ -211,6 +221,23 @@ async def create_audio_file(
     )
     
     return audio_file
+
+@router.post("/check-duplicate")
+async def check_duplicate_audio_file(
+    request: AudioFileRequest,
+    db: Session = Depends(get_db)
+):
+    """Check if an audio file with the same English text already exists"""
+    if not request.english_text.strip():
+        raise HTTPException(status_code=400, detail="English text is required")
+    
+    duplicate_summary = get_duplicate_summary(db, request.english_text)
+    
+    return {
+        "text": request.english_text.strip(),
+        "has_duplicates": duplicate_summary["has_duplicates"],
+        "duplicates": duplicate_summary["duplicates"]
+    }
 
 @router.get("/")
 async def list_audio_files(db: Session = Depends(get_db)):
@@ -297,10 +324,8 @@ async def delete_audio_file(audio_file_id: int, db: Session = Depends(get_db)):
         
         return {
             "message": "Audio file deleted successfully",
-            "deleted_files": deleted_files,
             "total_files_deleted": len(deleted_files),
-            "audio_file_id": audio_file_id,
-            "english_text": audio_file.english_text[:100] + "..." if len(audio_file.english_text) > 100 else audio_file.english_text
+            "audio_file_id": audio_file_id
         }
         
     except Exception as e:

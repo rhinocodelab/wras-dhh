@@ -129,3 +129,7 @@ temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Bolt files
+.bolt/
+*.bolt

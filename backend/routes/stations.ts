@@ -60,6 +60,22 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all stations without pagination (for bulk operations)
+router.get('/all', authenticateToken, async (req, res) => {
+  try {
+    console.log('Fetching all stations without pagination');
+    
+    const stations = await dbAll('SELECT * FROM stations ORDER BY station_name');
+    
+    console.log('Found stations:', stations.length);
+    
+    res.json({ stations });
+  } catch (error) {
+    console.error('Error fetching all stations:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Create new station
 router.post('/', authenticateToken, async (req, res) => {
   try {

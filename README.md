@@ -142,6 +142,7 @@ python main.py
 - **Audio Segmentation**: Automatic segmentation of audio files for different announcement types
 - **File Management**: Upload, store, and retrieve audio files
 - **Multi-language Support**: Support for multiple languages and accents
+- **Duplicate Prevention**: Automatic detection and prevention of duplicate English text entries
 
 ### User Authentication & Authorization
 - **JWT Authentication**: Secure token-based authentication
@@ -236,10 +237,13 @@ python main.py
 ### Audio Management (API Server)
 - `GET /api/templates` - Get all audio templates
 - `POST /api/templates` - Create new audio template
+- `POST /api/templates/check-duplicate` - Check for duplicate English text
 - `PUT /api/templates/:id` - Update audio template
 - `DELETE /api/templates/:id` - Delete audio template
 - `POST /api/templates/:id/generate-audio` - Generate audio from template
 - `GET /api/audio-files` - Get all audio files
+- `POST /api/audio-files` - Create new audio file
+- `POST /api/audio-files/check-duplicate` - Check for duplicate English text
 - `GET /api/audio-segments` - Get audio segments
 
 ### Health Checks
@@ -352,6 +356,7 @@ docker-compose up -d
 - **Rate Limiting**: API rate limiting to prevent abuse
 - **File Upload Security**: Secure file upload handling
 - **Environment Variables**: Sensitive data stored in environment variables
+- **Data Integrity**: Duplicate prevention to maintain data consistency
 
 ## Monitoring and Logging
 

@@ -277,7 +277,19 @@ export default function AnnouncementTemplates() {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to create audio file: ${response.statusText}`);
+        const errorData = await response.json();
+        
+        // Handle duplicate error specifically
+        if (response.status === 409) {
+          addToast({
+            type: 'warning',
+            title: 'Duplicate Text Found',
+            message: errorData.detail || 'This English text already exists in the database'
+          });
+          return;
+        }
+        
+        throw new Error(errorData.detail || `Failed to create audio file: ${response.statusText}`);
       }
 
       const audioFile = await response.json();
@@ -343,7 +355,7 @@ export default function AnnouncementTemplates() {
         addToast({
           type: 'error',
           title: 'Audio Loading Error',
-          message: `Failed to load ${language} audio file. Please check if the file exists.`
+          message: `Failed to load ${language} audio file. Please try again later.`
         });
         return;
       }
@@ -362,7 +374,7 @@ export default function AnnouncementTemplates() {
         addToast({
           type: 'error',
           title: 'Audio Playback Error',
-          message: `Failed to play ${language} audio: NotSupportedError: Failed to load because no supported source was found.`
+          message: `Failed to play ${language} audio. Please try again later.`
         });
         setPlayingAudio(null);
       });
@@ -384,7 +396,7 @@ export default function AnnouncementTemplates() {
       addToast({
         type: 'error',
         title: 'Audio Playback Error',
-        message: `Failed to play ${language} audio: ${error.message}`
+        message: `Failed to play ${language} audio. Please try again later.`
       });
       setPlayingAudio(null);
     }
@@ -423,7 +435,19 @@ export default function AnnouncementTemplates() {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to save template: ${response.statusText}`);
+        const errorData = await response.json();
+        
+        // Handle duplicate error specifically
+        if (response.status === 409) {
+          addToast({
+            type: 'warning',
+            title: 'Duplicate Text Found',
+            message: errorData.detail || 'This English text already exists in the database'
+          });
+          return;
+        }
+        
+        throw new Error(errorData.detail || `Failed to save template: ${response.statusText}`);
       }
 
       const savedTemplate = await response.json();

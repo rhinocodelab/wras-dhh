@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Edit2, Trash2, MapPin, Search, Upload, FileSpreadsheet, X, Trash } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Search, Upload, FileSpreadsheet, X, Trash, FileAudio, Flag } from 'lucide-react';
 import { Station } from '../types';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContainer';
+import { API_ENDPOINTS } from '../config/api';
 import * as XLSX from 'xlsx';
 
 interface StationManagementProps {
@@ -26,6 +27,18 @@ export default function StationManagement({ onDataChange }: StationManagementPro
     station_code: ''
   });
   const [error, setError] = useState<string | null>(null);
+  const [generatingAudio, setGeneratingAudio] = useState<Set<number>>(new Set());
+  const [stationsWithAudio, setStationsWithAudio] = useState<Set<number>>(new Set());
+  const [isGeneratingAllAudio, setIsGeneratingAllAudio] = useState(false);
+  const [audioQueue, setAudioQueue] = useState<any[]>([]);
+  const [queueProgress, setQueueProgress] = useState({ current: 0, total: 0, isProcessing: false });
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [setupProgress, setSetupProgress] = useState({ 
+    isSettingUp: false, 
+    message: '', 
+    currentStep: 0, 
+    totalSteps: 3 
+  });
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -41,6 +54,15 @@ export default function StationManagement({ onDataChange }: StationManagementPro
     console.log('useEffect triggered with:', { currentPage, pageSize, searchQuery });
     fetchStations();
   }, [currentPage, pageSize, searchQuery]);
+
+  // Check audio status for current stations
+  useEffect(() => {
+    if (stations.length > 0) {
+      checkStationsWithAudio(stations.map(s => s.station_name));
+    }
+  }, [stations]);
+
+
 
   // Reset to first page when search term changes
   useEffect(() => {
@@ -171,6 +193,495 @@ export default function StationManagement({ onDataChange }: StationManagementPro
     setSearchQuery('');
     setCurrentPage(1);
     searchInputRef.current?.focus();
+  };
+
+  const handleGenerateAudio = async (station: Station) => {
+    try {
+      setGeneratingAudio(prev => new Set(prev).add(station.id));
+      
+      // Create audio file using the station name
+      const response = await fetch(API_ENDPOINTS.audioFiles.create, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          english_text: station.station_name
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        
+        // Handle duplicate error specifically
+        if (response.status === 409) {
+          addToast({
+            type: 'warning',
+            title: 'Audio Already Exists',
+            message: `Audio for station "${station.station_name}" already exists in the database`
+          });
+          return;
+        }
+        
+        throw new Error(errorData.detail || 'Failed to generate audio');
+      }
+
+      const result = await response.json();
+      
+      // Add station to the set of stations with audio
+      setStationsWithAudio(prev => new Set(prev).add(station.id));
+      
+      addToast({
+        type: 'success',
+        title: 'Audio Generation Started',
+        message: `Audio generation started for station "${station.station_name}" in all languages`
+      });
+      
+    } catch (error: any) {
+      console.error('Audio generation error:', error);
+      addToast({
+        type: 'error',
+        title: 'Audio Generation Failed',
+        message: error.message || 'Failed to generate audio for station'
+      });
+    } finally {
+      setGeneratingAudio(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(station.id);
+        return newSet;
+      });
+    }
+  };
+
+  const checkStationsWithAudio = async (stationNames: string[]) => {
+    const stationsWithAudioSet = new Set<number>();
+    
+    for (let i = 0; i < stationNames.length; i++) {
+      try {
+        const response = await fetch(API_ENDPOINTS.audioFiles.checkDuplicate, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            english_text: stationNames[i]
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.has_duplicates) {
+            // Find the station ID by name
+            const station = stations.find(s => s.station_name === stationNames[i]);
+            if (station) {
+              stationsWithAudioSet.add(station.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error checking audio for station ${stationNames[i]}:`, error);
+      }
+    }
+    
+    setStationsWithAudio(stationsWithAudioSet);
+  };
+
+  const processAudioQueueWithStations = async (stationsToProcess: any[]) => {
+    if (stationsToProcess.length === 0) {
+      return;
+    }
+    
+    if (queueProgress.isProcessing) {
+      return;
+    }
+
+    setQueueProgress(prev => ({ ...prev, isProcessing: true }));
+    setQueuePaused(false);
+    
+    let successCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    const batchSize = 5; // Process 5 stations at a time
+    const totalStations = stationsToProcess.length;
+    
+    for (let i = 0; i < totalStations; i += batchSize) {
+      const batch = stationsToProcess.slice(i, i + batchSize);
+      
+      // Process batch in parallel
+      const batchPromises = batch.map(async (station) => {
+        try {
+          // Check if audio already exists
+          const checkResponse = await fetch(API_ENDPOINTS.audioFiles.checkDuplicate, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: station.station_name
+            }),
+          });
+
+          if (checkResponse.ok) {
+            const checkResult = await checkResponse.json();
+            
+            if (checkResult.has_duplicates) {
+              return { status: 'skipped', station };
+            }
+          }
+
+          // Create audio file
+          const response = await fetch(API_ENDPOINTS.audioFiles.create, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: station.station_name
+            }),
+          });
+
+          if (response.ok) {
+            return { status: 'success', station };
+          } else {
+            return { status: 'error', station };
+          }
+        } catch (error) {
+          console.error(`Error processing station ${station.station_name}:`, error);
+          return { status: 'error', station };
+        }
+      });
+
+      // Wait for batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Update counts
+      batchResults.forEach(result => {
+        if (result.status === 'success') successCount++;
+        else if (result.status === 'skipped') skippedCount++;
+        else errorCount++;
+      });
+
+      // Update progress
+      setQueueProgress(prev => ({ 
+        ...prev, 
+        current: Math.min(i + batchSize, totalStations),
+        total: totalStations
+      }));
+
+      // Add delay between batches to prevent overwhelming the server
+      if (i + batchSize < totalStations) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if queue is paused
+        if (queuePaused) {
+          setQueueProgress(prev => ({ ...prev, isProcessing: false }));
+          return;
+        }
+      }
+    }
+
+    // Update stations with audio state
+    await checkStationsWithAudio(stationsToProcess.map(s => s.station_name));
+
+    // Show completion message
+    let message = '';
+    if (successCount > 0) {
+      message += `Successfully started audio generation for ${successCount} stations. `;
+    }
+    if (skippedCount > 0) {
+      message += `Skipped ${skippedCount} stations (audio already exists). `;
+    }
+    if (errorCount > 0) {
+      message += `${errorCount} stations failed to generate audio.`;
+    }
+
+    addToast({
+      type: successCount > 0 ? 'success' : 'warning',
+      title: 'Queue Processing Complete',
+      message: message.trim()
+    });
+
+    // Clear queue and reset progress
+    setAudioQueue([]);
+    setQueueProgress({ current: 0, total: 0, isProcessing: false });
+    setQueuePaused(false);
+    setGeneratingAudio(new Set());
+    setIsGeneratingAllAudio(false);
+  };
+
+  const processAudioQueue = async () => {
+    if (audioQueue.length === 0) {
+      return;
+    }
+    
+    if (queueProgress.isProcessing) {
+      return;
+    }
+
+    setQueueProgress(prev => ({ ...prev, isProcessing: true }));
+    setQueuePaused(false);
+    
+    let successCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    const batchSize = 5; // Process 5 stations at a time
+    const totalStations = audioQueue.length;
+    
+    for (let i = 0; i < totalStations; i += batchSize) {
+      const batch = audioQueue.slice(i, i + batchSize);
+      
+      // Process batch in parallel
+      const batchPromises = batch.map(async (station) => {
+        try {
+          // Check if audio already exists
+          const checkResponse = await fetch(API_ENDPOINTS.audioFiles.checkDuplicate, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: station.station_name
+            }),
+          });
+
+          if (checkResponse.ok) {
+            const checkResult = await checkResponse.json();
+            
+            if (checkResult.has_duplicates) {
+              return { status: 'skipped', station };
+            }
+          }
+
+          // Create audio file
+          const response = await fetch(API_ENDPOINTS.audioFiles.create, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              english_text: station.station_name
+            }),
+          });
+
+          if (response.ok) {
+            return { status: 'success', station };
+          } else {
+            return { status: 'error', station };
+          }
+        } catch (error) {
+          console.error(`Error processing station ${station.station_name}:`, error);
+          return { status: 'error', station };
+        }
+      });
+
+      // Wait for batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Update counts
+      batchResults.forEach(result => {
+        if (result.status === 'success') successCount++;
+        else if (result.status === 'skipped') skippedCount++;
+        else errorCount++;
+      });
+
+      // Update progress
+      setQueueProgress(prev => ({ 
+        ...prev, 
+        current: Math.min(i + batchSize, totalStations),
+        total: totalStations
+      }));
+
+      // Add delay between batches to prevent overwhelming the server
+      if (i + batchSize < totalStations) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if queue is paused
+        if (queuePaused) {
+          setQueueProgress(prev => ({ ...prev, isProcessing: false }));
+          return;
+        }
+      }
+    }
+
+    // Update stations with audio state
+    await checkStationsWithAudio(audioQueue.map(s => s.station_name));
+
+    // Show completion message
+    let message = '';
+    if (successCount > 0) {
+      message += `Successfully started audio generation for ${successCount} stations. `;
+    }
+    if (skippedCount > 0) {
+      message += `Skipped ${skippedCount} stations (audio already exists). `;
+    }
+    if (errorCount > 0) {
+      message += `${errorCount} stations failed to generate audio.`;
+    }
+
+    addToast({
+      type: successCount > 0 ? 'success' : 'warning',
+      title: 'Queue Processing Complete',
+      message: message.trim()
+    });
+
+    // Clear queue and reset progress
+    setAudioQueue([]);
+    setQueueProgress({ current: 0, total: 0, isProcessing: false });
+    setQueuePaused(false);
+    setGeneratingAudio(new Set());
+    setIsGeneratingAllAudio(false);
+  };
+
+  const pauseQueue = () => {
+    setQueuePaused(true);
+    setQueueProgress(prev => ({ ...prev, isProcessing: false }));
+    addToast({
+      type: 'info',
+      title: 'Queue Paused',
+      message: 'Audio generation queue has been paused'
+    });
+  };
+
+  const resumeQueue = () => {
+    setQueuePaused(false);
+    processAudioQueue();
+    addToast({
+      type: 'info',
+      title: 'Queue Resumed',
+      message: 'Audio generation queue has been resumed'
+    });
+  };
+
+
+
+  const handleGenerateAudioForAll = async () => {
+    // Add timeout to prevent getting stuck
+    const setupTimeout = setTimeout(() => {
+      console.error('Setup timeout reached');
+      addToast({
+        type: 'error',
+        title: 'Setup Timeout',
+        message: 'Setup process took too long. Please try again.'
+      });
+      setIsGeneratingAllAudio(false);
+      setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+    }, 30000); // 30 second timeout
+
+    try {
+      setIsGeneratingAllAudio(true);
+      setSetupProgress({ 
+        isSettingUp: true, 
+        message: 'Initializing bulk audio generation...', 
+        currentStep: 1, 
+        totalSteps: 3 
+      });
+      
+      // Get all stations from all pages
+      setSetupProgress(prev => ({ 
+        ...prev, 
+        message: 'Fetching all stations from database...', 
+        currentStep: 2 
+      }));
+      
+      // Small delay to show progress
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      let allStations;
+      
+      try {
+        const allStationsResponse = await apiService.getAllStations();
+        
+        if (!allStationsResponse || !allStationsResponse.stations) {
+          throw new Error('Invalid response from server: missing stations data');
+        }
+        
+        allStations = allStationsResponse.stations;
+      } catch (error) {
+        console.error('Failed to fetch all stations, falling back to current page stations:', error);
+        // Fallback to current page stations if getAllStations fails
+        allStations = stations;
+        
+        // Add a toast to inform user about fallback
+        addToast({
+          type: 'info',
+          title: 'Using Current Page',
+          message: 'Could not fetch all stations, using current page stations instead'
+        });
+      }
+      
+      if (allStations.length === 0) {
+        addToast({
+          type: 'warning',
+          title: 'No Stations Found',
+          message: 'There are no stations to generate audio for'
+        });
+        setIsGeneratingAllAudio(false);
+        return;
+      }
+
+      // For now, let's add all stations to the queue and let the queue processor handle duplicates
+      // This is more efficient and avoids potential timeout issues during setup
+      setSetupProgress(prev => ({ 
+        ...prev, 
+        message: `Preparing queue with ${allStations.length} stations...`, 
+        currentStep: 3 
+      }));
+      
+      // Small delay to show progress
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const stationsToProcess = allStations;
+
+      if (stationsToProcess.length === 0) {
+        addToast({
+          type: 'info',
+          title: 'No New Stations',
+          message: 'All stations already have audio files generated'
+        });
+        setIsGeneratingAllAudio(false);
+        setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+        return;
+      }
+
+      // Add stations to queue
+      setAudioQueue(stationsToProcess);
+      setQueueProgress({ 
+        current: 0, 
+        total: stationsToProcess.length, 
+        isProcessing: false 
+      });
+
+      addToast({
+        type: 'success',
+        title: 'Queue Created',
+        message: `${stationsToProcess.length} stations added to audio generation queue`
+      });
+
+      // Clear setup progress and start processing the queue
+      setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+      
+      // Use a longer delay and pass the stations directly to avoid state timing issues
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Pass stations directly to avoid state timing issues
+      processAudioQueueWithStations(stationsToProcess);
+      
+      // Clear timeout on success
+      clearTimeout(setupTimeout);
+      
+    } catch (error: any) {
+      console.error('Error setting up audio queue:', error);
+      addToast({
+        type: 'error',
+        title: 'Queue Setup Failed',
+        message: error.message || 'Failed to set up audio generation queue'
+      });
+      setIsGeneratingAllAudio(false);
+      setSetupProgress({ isSettingUp: false, message: '', currentStep: 0, totalSteps: 3 });
+      clearTimeout(setupTimeout);
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,13 +825,41 @@ export default function StationManagement({ onDataChange }: StationManagementPro
             <span>Import</span>
           </button>
           {stations.length > 0 && (
-            <button
-              onClick={handleClearAll}
-              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
-            >
-              <Trash className="h-3 w-3" />
-              <span>Clear All</span>
-            </button>
+            <>
+              <button
+                onClick={handleGenerateAudioForAll}
+                disabled={generatingAudio.size > 0 || isGeneratingAllAudio || queueProgress.isProcessing}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeneratingAllAudio ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                ) : (
+                  <FileAudio className="h-3 w-3" />
+                )}
+                <span>
+                  {isGeneratingAllAudio 
+                    ? (setupProgress.isSettingUp 
+                        ? `Setting up... (${setupProgress.currentStep}/${setupProgress.totalSteps})`
+                        : 'Setting up queue...'
+                      )
+                    : 'Generate Audio for All Stations'
+                  }
+                </span>
+              </button>
+              {queueProgress.isProcessing && (
+                <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-none text-sm">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                  <span>Queue: {queueProgress.current}/{queueProgress.total}</span>
+                </div>
+              )}
+              <button
+                onClick={handleClearAll}
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
+              >
+                <Trash className="h-3 w-3" />
+                <span>Clear All</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -371,6 +910,69 @@ export default function StationManagement({ onDataChange }: StationManagementPro
         </div>
       )}
 
+      {/* Setup Progress */}
+      {setupProgress.isSettingUp && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-purple-900">Setting Up Audio Generation</h4>
+            <span className="text-sm text-purple-700">
+              Step {setupProgress.currentStep} of {setupProgress.totalSteps}
+            </span>
+          </div>
+          <div className="w-full bg-purple-200 rounded-full h-2">
+            <div 
+              className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(setupProgress.currentStep / setupProgress.totalSteps) * 100}%` }}
+            ></div>
+          </div>
+          <p className="text-sm text-purple-700 mt-2">
+            {setupProgress.message}
+          </p>
+        </div>
+      )}
+
+      {/* Queue Progress */}
+      {(queueProgress.isProcessing || queuePaused) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-blue-900">Audio Generation Queue</h4>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-blue-700">
+                {queueProgress.current} / {queueProgress.total} stations
+              </span>
+              {queueProgress.isProcessing && !queuePaused && (
+                <button
+                  onClick={pauseQueue}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Pause
+                </button>
+              )}
+              {queuePaused && (
+                <button
+                  onClick={resumeQueue}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Resume
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(queueProgress.current / queueProgress.total) * 100}%` }}
+            ></div>
+          </div>
+          <p className="text-sm text-blue-700 mt-2">
+            {queuePaused 
+              ? 'Queue is paused. Click Resume to continue.' 
+              : 'Processing stations in batches... Please wait.'
+            }
+          </p>
+        </div>
+      )}
+
       {/* Stations Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -397,8 +999,13 @@ export default function StationManagement({ onDataChange }: StationManagementPro
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <MapPin className="h-5 w-5 text-gray-400 mr-3" />
-                      <div>
+                      <div className="flex items-center">
                         <div className="text-sm font-medium text-gray-900">{station.station_name}</div>
+                        {stationsWithAudio.has(station.id) && (
+                          <div title="Audio files available">
+                            <Flag className="h-3 w-3 text-green-600 ml-2" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -413,14 +1020,28 @@ export default function StationManagement({ onDataChange }: StationManagementPro
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
                       <button
+                        onClick={() => handleGenerateAudio(station)}
+                        disabled={generatingAudio.has(station.id)}
+                        className="text-purple-600 hover:text-purple-900 p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Generate Audio"
+                      >
+                        {generatingAudio.has(station.id) ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+                        ) : (
+                          <FileAudio className="h-3 w-3" />
+                        )}
+                      </button>
+                      <button
                         onClick={() => handleEdit(station)}
                         className="text-blue-600 hover:text-blue-900 p-0.5"
+                        title="Edit Station"
                       >
                         <Edit2 className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => handleDelete(station.id)}
                         className="text-red-600 hover:text-red-900 p-0.5"
+                        title="Delete Station"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
