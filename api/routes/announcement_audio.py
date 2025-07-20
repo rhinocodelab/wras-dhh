@@ -373,4 +373,54 @@ async def delete_announcement_audio_segment(segment_id: int, db: Session = Depen
         raise
     except Exception as e:
         print(f"❌ Error deleting audio segment: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete audio segment: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to delete audio segment: {str(e)}")
+
+@router.delete("/clear-all-segments")
+async def clear_all_announcement_segments(db: Session = Depends(get_db)):
+    """Clear all announcement audio segments from database and file system"""
+    try:
+        print("🗑️ Starting to clear all announcement audio segments...")
+        
+        # Get all announcement audio segments
+        segments = db.query(AnnouncementAudioSegment).filter(
+            AnnouncementAudioSegment.is_active == True
+        ).all()
+        
+        deleted_files = []
+        deleted_count = 0
+        
+        # Delete audio files and database records
+        for segment in segments:
+            try:
+                # Delete audio file if it exists
+                if segment.audio_path:
+                    file_path = f"/var/www{segment.audio_path}"
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        deleted_files.append(segment.audio_path)
+                        print(f"   Deleted audio file: {segment.audio_path}")
+                
+                # Mark segment as inactive in database
+                segment.is_active = False
+                deleted_count += 1
+                
+            except Exception as e:
+                print(f"⚠️ Failed to delete segment {segment.id}: {e}")
+        
+        # Commit database changes
+        db.commit()
+        
+        print(f"✅ Cleared {deleted_count} announcement segments")
+        print(f"   Deleted {len(deleted_files)} audio files")
+        
+        return {
+            "message": "All announcement audio segments cleared successfully",
+            "deleted_segments": deleted_count,
+            "deleted_files": len(deleted_files),
+            "deleted_file_paths": deleted_files
+        }
+        
+    except Exception as e:
+        print(f"❌ Error clearing announcement segments: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to clear announcement segments: {str(e)}") 

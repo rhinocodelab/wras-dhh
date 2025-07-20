@@ -38,10 +38,13 @@ export default function AnnouncementAudios() {
   const { addToast } = useToast();
   const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshingFinal, setIsRefreshingFinal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredAudioFiles, setFilteredAudioFiles] = useState<AudioFile[]>([]);
   const [announcementSegments, setAnnouncementSegments] = useState<TemplateSegments[]>([]);
   const [finalAnnouncements, setFinalAnnouncements] = useState<any[]>([]);
+  const [previousFinalCount, setPreviousFinalCount] = useState(0);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<'audio-files' | 'announcement-segments' | 'final-announcements'>('audio-files');
 
   useEffect(() => {
@@ -49,6 +52,33 @@ export default function AnnouncementAudios() {
     fetchAnnouncementSegments();
     fetchFinalAnnouncements();
   }, []);
+
+  // Only check for new announcements when user is on the Final Announcements tab
+  useEffect(() => {
+    if (activeTab === 'final-announcements') {
+      // Check for new announcements every 30 seconds when on this tab
+      const interval = setInterval(() => {
+        checkForNewAnnouncements();
+      }, 30000); // 30 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, previousFinalCount]);
+
+  // Keyboard shortcut for refreshing final announcements (Ctrl+R or Cmd+R)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+        event.preventDefault(); // Prevent browser refresh
+        if (activeTab === 'final-announcements') {
+          fetchFinalAnnouncements();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab]);
 
   useEffect(() => {
     // Filter audio files based on search term
@@ -101,11 +131,33 @@ export default function AnnouncementAudios() {
 
   const fetchFinalAnnouncements = async () => {
     try {
-      // List files in the final_announcements directory
-      const response = await fetch('http://localhost:5001/api/final-announcement/list');
+      setIsRefreshingFinal(true);
+      // Add cache-busting parameter to prevent browser caching
+      const timestamp = new Date().getTime();
+      const response = await fetch(`http://localhost:5001/api/final-announcement/list?_t=${timestamp}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
+        const newCount = data.announcements?.length || 0;
+        console.log('Fetched final announcements:', newCount, 'files');
+        
+        // Check if new announcements were added
+        if (newCount > previousFinalCount && previousFinalCount > 0) {
+          const newAnnouncements = newCount - previousFinalCount;
+          addToast({
+            type: 'success',
+            title: 'New Announcements Detected',
+            message: `${newAnnouncements} new final announcement(s) have been generated!`
+          });
+        }
+        
+        setPreviousFinalCount(newCount);
         setFinalAnnouncements(data.announcements || []);
+        setLastChecked(new Date());
       } else {
         // If the endpoint doesn't exist yet, we'll handle it gracefully
         console.log('Final announcements endpoint not available yet');
@@ -115,6 +167,38 @@ export default function AnnouncementAudios() {
       console.error('Error fetching final announcements:', error);
       // Don't show error toast for this as it might not be implemented yet
       setFinalAnnouncements([]);
+    } finally {
+      setIsRefreshingFinal(false);
+    }
+  };
+
+  // Function to check if there are new announcements without updating the UI
+  const checkForNewAnnouncements = async () => {
+    try {
+      const timestamp = new Date().getTime();
+      const response = await fetch(`http://localhost:5001/api/final-announcement/list?_t=${timestamp}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const newCount = data.announcements?.length || 0;
+        
+        // Only show notification if there are new announcements
+        if (newCount > previousFinalCount && previousFinalCount > 0) {
+          const newAnnouncements = newCount - previousFinalCount;
+          addToast({
+            type: 'info',
+            title: 'New Announcements Available',
+            message: `${newAnnouncements} new final announcement(s) have been generated. Click "Refresh Final" to view them.`,
+            duration: 8000 // Show for 8 seconds
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Error checking for new announcements:', error);
     }
   };
 
@@ -302,6 +386,40 @@ export default function AnnouncementAudios() {
     }
   };
 
+  const clearAllAnnouncementSegments = async () => {
+    if (!window.confirm('Are you sure you want to clear all announcement audio segments? This will remove all segments from the database and delete all audio files. This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch('http://localhost:5001/api/announcement-audio/clear-all-segments', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        addToast({
+          type: 'success',
+          title: 'All Segments Cleared',
+          message: `Successfully cleared ${data.deleted_segments} announcement segments and ${data.deleted_files} audio files`
+        });
+        fetchAnnouncementSegments(); // Refresh the list
+      } else {
+        throw new Error('Failed to clear announcement segments');
+      }
+    } catch (error: any) {
+      console.error('Error clearing announcement segments:', error);
+      addToast({
+        type: 'error',
+        title: 'Clear Failed',
+        message: error.message || 'Failed to clear announcement segments'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -328,16 +446,29 @@ export default function AnnouncementAudios() {
           <h1 className="text-2xl font-bold text-gray-900">Announcement Audios</h1>
           <p className="text-gray-600 mt-1">Manage and play announcement audio files and segments</p>
         </div>
-        <button
-          onClick={() => {
-            fetchAudioFiles();
-            fetchAnnouncementSegments();
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              fetchAudioFiles();
+              fetchAnnouncementSegments();
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh All
+          </button>
+          <button
+            onClick={() => {
+              fetchFinalAnnouncements();
+            }}
+            disabled={isRefreshingFinal}
+            title="Refresh Final Announcements (Ctrl+R)"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshingFinal ? 'animate-spin' : ''}`} />
+            Refresh Final
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -364,7 +495,11 @@ export default function AnnouncementAudios() {
             Announcement Segments ({announcementSegments.length})
           </button>
           <button
-            onClick={() => setActiveTab('final-announcements')}
+            onClick={() => {
+              setActiveTab('final-announcements');
+              // Refresh final announcements when switching to this tab
+              fetchFinalAnnouncements();
+            }}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'final-announcements'
                 ? 'border-blue-500 text-blue-600'
@@ -507,7 +642,25 @@ export default function AnnouncementAudios() {
               </p>
             </div>
           ) : (
-            announcementSegments.map((templateSegment) => (
+            <>
+              {/* Clear All Button */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Announcement Segments ({announcementSegments.length} templates)
+                  </h3>
+                  <button
+                    onClick={clearAllAnnouncementSegments}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Clear All Segments
+                  </button>
+                </div>
+              </div>
+              
+              {announcementSegments.map((templateSegment) => (
               <div key={templateSegment.template_id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900">
@@ -560,7 +713,8 @@ export default function AnnouncementAudios() {
                   ))}
                 </div>
               </div>
-            ))
+            ))}
+            </>
           )}
         </div>
       )}
@@ -580,9 +734,19 @@ export default function AnnouncementAudios() {
             <>
               {/* Clear All Button */}
               <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Final Announcements ({finalAnnouncements.length})
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Final Announcements ({finalAnnouncements.length})
+                  </h3>
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <div className={`w-2 h-2 rounded-full ${isRefreshingFinal ? 'bg-blue-500 animate-spin' : 'bg-gray-400'}`}></div>
+                    <span>
+                      {isRefreshingFinal ? 'Refreshing...' : 
+                        lastChecked ? `Last checked: ${lastChecked.toLocaleTimeString()}` : 'Not checked yet'
+                      }
+                    </span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={clearDynamicContent}
