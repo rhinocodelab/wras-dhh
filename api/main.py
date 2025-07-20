@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel
 import os
@@ -12,6 +13,8 @@ from config import Config
 from database import create_tables
 from routes import templates
 from routes import audio_files
+from routes import announcement_audio
+from routes import final_announcement
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -248,8 +251,35 @@ app.include_router(templates.router, prefix="/api", tags=["templates"])
 # Include audio files routes
 app.include_router(audio_files.router, prefix="/api", tags=["audio-files"])
 
-# Audio files are now served by Apache2 from /var/www/audio_files/
-# No need to mount static files in FastAPI
+# Include announcement audio routes
+app.include_router(announcement_audio.router, prefix="/api", tags=["announcement-audio"])
+
+# Include final announcement routes
+app.include_router(final_announcement.router, prefix="/api", tags=["final-announcement"])
+
+# Mount static files for audio serving
+try:
+    app.mount("/audio_files", StaticFiles(directory="/var/www/audio_files"), name="audio_files")
+    print("✅ Audio files mounted at /audio_files")
+except Exception as e:
+    print(f"⚠️ Could not mount audio files: {e}")
+    print("Audio files will be served via individual endpoints")
+
+# Fallback audio file serving endpoint
+@app.get("/audio_files/{filename}")
+async def serve_audio_file(filename: str):
+    """Serve audio files from /var/www/audio_files/"""
+    import os
+    file_path = f"/var/www/audio_files/{filename}"
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    return FileResponse(
+        path=file_path,
+        media_type="audio/mpeg",
+        filename=filename
+    )
 
 if __name__ == "__main__":
     import uvicorn

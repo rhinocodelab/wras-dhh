@@ -38,10 +38,10 @@ class AudioSegment(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationship
-    template = relationship("AnnouncementTemplate", back_populates="audio_segments")
+    template = relationship("AnnouncementTemplate", back_populates="selected_audio_segments")
 
 # Add back reference to AnnouncementTemplate
-AnnouncementTemplate.audio_segments = relationship("AudioSegment", back_populates="template")
+AnnouncementTemplate.selected_audio_segments = relationship("AudioSegment", back_populates="template")
 
 class AudioFile(Base):
     __tablename__ = "audio_files"
@@ -58,4 +58,25 @@ class AudioFile(Base):
     gujarati_translation = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now()) 
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class AnnouncementAudioSegment(Base):
+    __tablename__ = "announcement_audio_segments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("announcement_templates.id"), nullable=False)
+    category = Column(String(50), nullable=False, index=True)
+    segment_text = Column(Text, nullable=False)
+    language = Column(String(20), nullable=False)  # 'english', 'marathi', 'hindi', 'gujarati'
+    segment_order = Column(Integer, nullable=False)  # Order in the announcement
+    audio_path = Column(String(500), nullable=True)
+    file_size = Column(Integer, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationship
+    template = relationship("AnnouncementTemplate", back_populates="announcement_audio_segments")
+
+# Add back reference to AnnouncementTemplate
+AnnouncementTemplate.announcement_audio_segments = relationship("AnnouncementAudioSegment", back_populates="template") 

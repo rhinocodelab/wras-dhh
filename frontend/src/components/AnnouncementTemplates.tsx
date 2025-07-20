@@ -74,6 +74,7 @@ export default function AnnouncementTemplates() {
   const [generatedAudioFile, setGeneratedAudioFile] = useState<AudioFile | null>(null);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const [audioElements, setAudioElements] = useState<{ [key: string]: HTMLAudioElement }>({});
+  const [generatingAudioForTemplate, setGeneratingAudioForTemplate] = useState<number | null>(null);
 
   useEffect(() => {
     loadTemplatesForCategory(selectedCategory);
@@ -609,6 +610,60 @@ export default function AnnouncementTemplates() {
     }
   };
 
+  const generateAudioSegments = async (template: AnnouncementTemplate) => {
+    if (!template.dbId) {
+      addToast({
+        type: 'error',
+        title: 'Cannot Generate Audio',
+        message: 'Template must be saved to database before generating audio'
+      });
+      return;
+    }
+
+    try {
+      setGeneratingAudioForTemplate(template.dbId);
+      
+      const response = await fetch('http://localhost:5001/api/announcement-audio/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          template_id: template.dbId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 409) {
+          addToast({
+            type: 'warning',
+            title: 'Audio Already Exists',
+            message: 'Audio segments already exist for this template'
+          });
+        } else {
+          throw new Error(errorData.detail || 'Failed to generate audio segments');
+        }
+      } else {
+        const result = await response.json();
+        addToast({
+          type: 'success',
+          title: 'Audio Generation Started',
+          message: `Audio segments generation started for "${template.title}". You can monitor progress in the Announcement Audios section.`
+        });
+      }
+    } catch (error: any) {
+      console.error('Error generating audio segments:', error);
+      addToast({
+        type: 'error',
+        title: 'Audio Generation Failed',
+        message: error.message || 'Failed to generate audio segments'
+      });
+    } finally {
+      setGeneratingAudioForTemplate(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -700,6 +755,23 @@ export default function AnnouncementTemplates() {
                         >
                           <Edit2 className="h-3 w-3" />
                           <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => generateAudioSegments(template)}
+                          disabled={generatingAudioForTemplate === template.dbId}
+                          className="flex items-center space-x-1 px-2 py-1 bg-indigo-600 text-white rounded-none hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors"
+                        >
+                          {generatingAudioForTemplate === template.dbId ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                              <span>Generating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="h-3 w-3" />
+                              <span>Generate Audio Segments</span>
+                            </>
+                          )}
                         </button>
                         <button
                           onClick={() => deleteTemplateFromDatabase(template)}

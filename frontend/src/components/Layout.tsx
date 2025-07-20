@@ -18,6 +18,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
     { id: 'stations', label: 'Stations', icon: MapPin },
     { id: 'routes', label: 'Train Routes', icon: Route },
     { id: 'templates', label: 'Announcement Templates', icon: FileText },
+    { id: 'announcement-audios', label: 'Announcement Audios', icon: Volume2 },
     { id: 'audio-files', label: 'Audio Files', icon: Volume2 },
   ];
 

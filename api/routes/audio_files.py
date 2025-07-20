@@ -187,6 +187,10 @@ class AudioFileRequest(BaseModel):
 class AudioFileBulkDeleteRequest(BaseModel):
     english_texts: List[str]
 
+class SingleLanguageAudioRequest(BaseModel):
+    text: str
+    language: str  # 'english', 'marathi', 'hindi', 'gujarati'
+
 @router.post("/")
 async def create_audio_file(
     request: AudioFileRequest,
@@ -624,6 +628,71 @@ async def cleanup_station_audio_files(db: Session = Depends(get_db)):
     except Exception as e:
         print(f"❌ Error during aggressive cleanup: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clean up audio files: {str(e)}")
+
+@router.post("/single-language")
+async def generate_single_language_audio(
+    request: SingleLanguageAudioRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Generate audio for text in a specific language"""
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    if request.language not in ['english', 'marathi', 'hindi', 'gujarati']:
+        raise HTTPException(status_code=400, detail="Language must be one of: english, marathi, hindi, gujarati")
+    
+    try:
+        # Create audio directory if it doesn't exist
+        audio_dir = "/var/www/audio_files"
+        os.makedirs(audio_dir, exist_ok=True)
+        
+        # Generate timestamp for unique naming
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Get voice configuration for the specified language
+        voice_config = Config.TTS_VOICES.get(request.language.capitalize())
+        if not voice_config:
+            raise HTTPException(status_code=400, detail=f"Voice configuration not found for language: {request.language}")
+        
+        # Create filename
+        filename = f"audio_{request.language}_{timestamp}_{hash(request.text) % 10000}.mp3"
+        filepath = os.path.join(audio_dir, filename)
+        
+        print(f"🎵 Generating {request.language} audio for text: {request.text[:100]}...")
+        print(f"   Output file: {filepath}")
+        
+        # Generate speech
+        generate_speech(request.text.strip(), filepath, voice_config)
+        
+        # Verify file was created and has content
+        if os.path.exists(filepath):
+            file_size = os.path.getsize(filepath)
+            print(f"   File created: {filepath} ({file_size} bytes)")
+            
+            if file_size > 1000:  # Minimum size for valid audio
+                print(f"✅ {request.language} audio generated successfully: {filename}")
+                
+                return {
+                    "message": f"{request.language.capitalize()} audio generated successfully",
+                    "language": request.language,
+                    "text": request.text.strip(),
+                    "audio_path": f"/audio_files/{filename}",
+                    "file_size": file_size,
+                    "filename": filename
+                }
+            else:
+                print(f"⚠️ Audio file too small ({file_size} bytes), may be corrupted")
+                raise HTTPException(status_code=500, detail="Generated audio file is too small, may be corrupted")
+        else:
+            print(f"❌ Audio file not created")
+            raise HTTPException(status_code=500, detail="Failed to create audio file")
+            
+    except Exception as e:
+        print(f"❌ Error generating {request.language} audio: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate {request.language} audio: {str(e)}")
 
 @router.get("/{audio_file_id}")
 async def get_audio_file(audio_file_id: int, db: Session = Depends(get_db)):

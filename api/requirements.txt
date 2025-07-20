@@ -3,4 +3,5 @@ uvicorn==0.35.0
 google-cloud-translate==3.21.1
 google-cloud-texttospeech==2.18.0
 pydantic==2.11.7
-sqlalchemy==2.0.41 
+sqlalchemy==2.0.41
+pydub==0.25.1 
