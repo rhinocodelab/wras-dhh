@@ -738,13 +738,7 @@ export default function AnnouncementTemplates() {
                           <Save className="h-3 w-3" />
                           <span>{template.isSaved ? 'Saved' : 'Save'}</span>
                         </button>
-                        <button
-                          onClick={() => openAudioModal(template)}
-                          className="flex items-center space-x-1 px-2 py-1 bg-purple-600 text-white rounded-none hover:bg-purple-700 text-xs transition-colors"
-                        >
-                          <Volume2 className="h-3 w-3" />
-                          <span>Generate Audio</span>
-                        </button>
+
                       </>
                     )}
                     {template.isSaved && template.dbId && (
@@ -769,7 +763,7 @@ export default function AnnouncementTemplates() {
                           ) : (
                             <>
                               <Volume2 className="h-3 w-3" />
-                              <span>Generate Audio Segments</span>
+                              <span>Generate Audio</span>
                             </>
                           )}
                         </button>

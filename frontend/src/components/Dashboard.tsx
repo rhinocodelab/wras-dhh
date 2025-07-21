@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Train, MapPin, Route, Users, Search, X, Volume2 } from 'lucide-react';
+import { Train, MapPin, Route, Users, Search, X, Volume2, Square } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContainer';
 
@@ -31,6 +31,24 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const [categoryValues, setCategoryValues] = useState<{ [key: number]: string }>({});
   const [generatingAudio, setGeneratingAudio] = useState<Set<number>>(new Set());
   const [availableTemplates, setAvailableTemplates] = useState<{ [key: string]: number }>({});
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [selectedRoute, setSelectedRoute] = useState<TrainRoute | null>(null);
+  const [announcementTexts, setAnnouncementTexts] = useState<{
+    english: string;
+    hindi: string;
+    marathi: string;
+    gujarati: string;
+  }>({
+    english: '',
+    hindi: '',
+    marathi: '',
+    gujarati: ''
+  });
+  const [isGeneratingMergedAudio, setIsGeneratingMergedAudio] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [mergedAudioPath, setMergedAudioPath] = useState<string | null>(null);
+  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
   const announcementCategories = [
     'arrival',
@@ -182,6 +200,215 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
     });
   };
 
+  const handleAnnouncementClick = async (route: TrainRoute) => {
+    setSelectedRoute(route);
+    
+    // Get the category and platform from the search results table
+    const category = categoryValues[route.id] || 'arrival';
+    const platform = platformValues[route.id] || 1;
+    
+    // Get the actual route data from search results
+    const searchResultRoute = searchResults.find(r => r.id === route.id);
+    if (!searchResultRoute) {
+      setShowProgressModal(false);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Route not found in search results'
+      });
+      return;
+    }
+    
+    try {
+      // Show progress modal
+      setShowProgressModal(true);
+      setProgressMessage('Loading announcement template...');
+      
+      // Fetch template for the category
+      const templateResponse = await fetch(`http://localhost:5001/api/templates?category=${category}`);
+      if (templateResponse.ok) {
+        const templates = await templateResponse.json();
+        if (!templates || templates.length === 0) {
+          setShowProgressModal(false);
+          addToast({
+            type: 'error',
+            title: 'Template Not Found',
+            message: `No template found for category: ${getCategoryDisplayName(category)}`
+          });
+          return;
+        }
+        const template = templates[0]; // Get the first template for this category
+        
+        // Replace placeholders with actual data from search results
+        const replacePlaceholders = (text: string) => {
+          // Add spaces between each digit of train number for individual pronunciation
+          const spacedTrainNumber = searchResultRoute.train_number.split('').join(' ');
+          
+          return text
+            .replace(/\{train_number\}/g, spacedTrainNumber)
+            .replace(/\{train_name\}/g, searchResultRoute.train_name)
+            .replace(/\{start_station_name\}/g, searchResultRoute.start_station_name)
+            .replace(/\{end_station_name\}/g, searchResultRoute.end_station_name)
+            .replace(/\{platform_number\}/g, platform.toString())
+            .replace(/\{start_station_code\}/g, searchResultRoute.start_station_code)
+            .replace(/\{end_station_code\}/g, searchResultRoute.end_station_code);
+        };
+        
+        // Generate announcement texts for all languages
+        const texts = {
+          english: replacePlaceholders(template.english_text || ''),
+          hindi: replacePlaceholders(template.hindi_text || ''),
+          marathi: replacePlaceholders(template.marathi_text || ''),
+          gujarati: replacePlaceholders(template.gujarati_text || '')
+        };
+        
+        setAnnouncementTexts(texts);
+        
+        // Check for existing audio files first, then generate if needed
+        setProgressMessage('Checking for existing audio files...');
+        
+        const audioPromises = [];
+        const languages = [
+          { key: 'english', text: texts.english },
+          { key: 'hindi', text: texts.hindi },
+          { key: 'marathi', text: texts.marathi },
+          { key: 'gujarati', text: texts.gujarati }
+        ];
+        
+        for (const lang of languages) {
+          // First check if audio file already exists
+          const checkResponse = await fetch('http://localhost:5001/api/audio-files/check-duplicate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              english_text: lang.text
+            })
+          });
+          
+          if (checkResponse.ok) {
+            const checkResult = await checkResponse.json();
+            
+            if (checkResult.has_duplicates && checkResult.duplicates.length > 0) {
+              // Use existing audio file
+              const existingAudio = checkResult.duplicates[0];
+              const audioPath = existingAudio[`${lang.key}_audio_path`];
+              
+              if (audioPath) {
+                audioPromises.push(Promise.resolve({
+                  audio_path: audioPath,
+                  language: lang.key,
+                  is_existing: true
+                }));
+                setProgressMessage(`Using existing ${lang.key} audio...`);
+                continue;
+              }
+            }
+          }
+          
+          // Generate new audio file if not found
+          setProgressMessage(`Generating ${lang.key} audio...`);
+          const generateResponse = await fetch('http://localhost:5001/api/audio-files/single-language', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: lang.text,
+              language: lang.key
+            })
+          });
+          
+          if (generateResponse.ok) {
+            const newAudio = await generateResponse.json();
+            audioPromises.push(Promise.resolve({
+              ...newAudio,
+              language: lang.key,
+              is_existing: false
+            }));
+          } else {
+            throw new Error(`Failed to generate ${lang.key} audio`);
+          }
+        }
+        
+        setProgressMessage('Processing audio files...');
+        const audioFiles = await Promise.all(audioPromises);
+        
+        // Merge the audio files
+        setProgressMessage('Merging audio files...');
+        const mergeResponse = await fetch('http://localhost:5001/api/audio-files/merge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audio_files: audioFiles.map(file => `/var/www${file.audio_path}`),
+            output_filename: `merged_announcement_${searchResultRoute.train_number}_${category}_${Date.now()}.wav`
+          })
+        });
+        
+        if (mergeResponse.ok) {
+          const mergedAudio = await mergeResponse.json();
+          setProgressMessage('Playing merged announcement...');
+          
+          // Store the merged audio path for the modal
+          setMergedAudioPath(mergedAudio.audio_path);
+          
+          // Calculate reuse statistics
+          const existingCount = audioFiles.filter(file => file.is_existing).length;
+          const newCount = audioFiles.filter(file => !file.is_existing).length;
+          
+          // Close progress modal and show success
+          setShowProgressModal(false);
+          addToast({
+            type: 'success',
+            title: 'Success',
+            message: `Merged announcement audio generated successfully (${existingCount} reused, ${newCount} new)`
+          });
+          
+          // Show the announcement modal with texts
+          setShowAnnouncementModal(true);
+        } else {
+          throw new Error('Failed to merge audio files');
+        }
+      } else {
+        setShowProgressModal(false);
+        addToast({
+          type: 'error',
+          title: 'Template Not Found',
+          message: `No template found for category: ${getCategoryDisplayName(category)}`
+        });
+      }
+    } catch (error) {
+      console.error('Error in announcement process:', error);
+      setShowProgressModal(false);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to generate announcement audio'
+      });
+    }
+  };
+
+
+
+  const handlePlayAnnouncement = () => {
+    if (mergedAudioPath) {
+      // Stop any currently playing audio
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+      }
+      
+      const audio = new Audio(`http://localhost:5001${mergedAudioPath}`);
+      setCurrentAudio(audio);
+      audio.play();
+    }
+  };
+
+  const handleStopAnnouncement = () => {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      setCurrentAudio(null);
+    }
+  };
+
   const handleGenerateAudio = async (route: TrainRoute) => {
     try {
       setGeneratingAudio(prev => new Set(prev).add(route.id));
@@ -278,7 +505,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Search Train Routes</h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
+          <div className="relative w-64">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-gray-400" />
             </div>
@@ -288,7 +515,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Search by train number or train name..."
-              className="block w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="block w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             {searchTerm && (
               <button
@@ -302,7 +529,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
           <button
             onClick={handleSearch}
             disabled={isSearching}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSearching ? (
               <>
@@ -317,110 +544,112 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
             )}
           </button>
         </div>
+      </div>
 
-        {/* Search Results */}
-        {hasSearched && (
-          <div className="mt-6">
-            {searchResults.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Train Number
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Train Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        From Station
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        To Station
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Platform
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Announcement Category
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {searchResults.map((route) => (
-                      <tr key={route.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {route.train_number}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {route.train_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div>
-                            <div className="font-medium">{route.start_station_name}</div>
-                            <div className="text-gray-500 text-xs">({route.start_station_code})</div>
+      {/* Search Results */}
+      {hasSearched && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          {searchResults.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
+                      Train Number
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+                      Train Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                      From Station
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                      To Station
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
+                      Platform
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">
+                      Announcement Category
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {searchResults.map((route) => (
+                    <tr key={route.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {route.train_number}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {route.train_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div>
+                          <div className="font-medium">{route.start_station_name}</div>
+                          <div className="text-gray-500 text-xs">({route.start_station_code})</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div>
+                          <div className="font-medium">{route.end_station_name}</div>
+                          <div className="text-gray-500 text-xs">({route.end_station_code})</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingPlatform === route.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="20"
+                              value={platformValues[route.id] || 1}
+                              onChange={(e) => handlePlatformChange(route.id, e.target.value)}
+                              onKeyPress={(e) => handlePlatformKeyPress(e, route.id)}
+                              onBlur={() => handlePlatformSave(route.id)}
+                              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handlePlatformSave(route.id)}
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-600 rounded-none hover:bg-blue-50"
+                            >
+                              Save
+                            </button>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div>
-                            <div className="font-medium">{route.end_station_name}</div>
-                            <div className="text-gray-500 text-xs">({route.end_station_code})</div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{platformValues[route.id] || 1}</span>
+                            <button
+                              onClick={() => handlePlatformEdit(route.id)}
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-600 rounded-none hover:bg-blue-50"
+                            >
+                              Edit
+                            </button>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {editingPlatform === route.id ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="1"
-                                max="20"
-                                value={platformValues[route.id] || 1}
-                                onChange={(e) => handlePlatformChange(route.id, e.target.value)}
-                                onKeyPress={(e) => handlePlatformKeyPress(e, route.id)}
-                                onBlur={() => handlePlatformSave(route.id)}
-                                className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => handlePlatformSave(route.id)}
-                                className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                              >
-                                Save
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{platformValues[route.id] || 1}</span>
-                              <button
-                                onClick={() => handlePlatformEdit(route.id)}
-                                className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <select
-                            value={categoryValues[route.id] || 'arrival'}
-                            onChange={(e) => handleCategoryChange(route.id, e.target.value)}
-                            className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                          >
-                            {announcementCategories.map((category) => (
-                              <option key={category} value={category}>
-                                {getCategoryDisplayName(category)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <select
+                          value={categoryValues[route.id] || 'arrival'}
+                          onChange={(e) => handleCategoryChange(route.id, e.target.value)}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          {announcementCategories.map((category) => (
+                            <option key={category} value={category}>
+                              {getCategoryDisplayName(category)}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="flex flex-col gap-2">
                           <button
                             onClick={() => handleGenerateAudio(route)}
                             disabled={generatingAudio.has(route.id)}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {generatingAudio.has(route.id) ? (
                               <>
@@ -434,24 +663,189 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                               </>
                             )}
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <button
+                            onClick={() => handleAnnouncementClick(route)}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                          >
+                            <Volume2 className="h-3 w-3" />
+                            Announcement
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Route className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No train routes found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Try searching with a different train number or train name.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Announcement Modal */}
+      {showAnnouncementModal && selectedRoute && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-3 border w-11/12 md:w-3/4 lg:w-2/3 shadow-lg rounded-md bg-white">
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Announcement for {selectedRoute.train_name} ({selectedRoute.train_number})
+                </h3>
+                <button
+                  onClick={() => {
+                    if (currentAudio) {
+                      currentAudio.pause();
+                      currentAudio.currentTime = 0;
+                      setCurrentAudio(null);
+                    }
+                    setShowAnnouncementModal(false);
+                    setMergedAudioPath(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-            ) : (
-              <div className="text-center py-8">
-                <Route className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No train routes found</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Try searching with a different train number or train name.
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left Panel - Announcement Text */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Announcement Text</h4>
+                  
+                  {/* English */}
+                  <div className="border border-gray-200 rounded-none p-2">
+                    <h5 className="font-medium text-gray-900 mb-1 text-xs">English</h5>
+                    <p className="text-gray-700 text-xs">{announcementTexts.english}</p>
+                  </div>
+                  
+                  {/* Hindi */}
+                  <div className="border border-gray-200 rounded-none p-2">
+                    <h5 className="font-medium text-gray-900 mb-1 text-xs">हिंदी</h5>
+                    <p className="text-gray-700 text-xs">{announcementTexts.hindi}</p>
+                  </div>
+                  
+                  {/* Marathi */}
+                  <div className="border border-gray-200 rounded-none p-2">
+                    <h5 className="font-medium text-gray-900 mb-1 text-xs">मराठी</h5>
+                    <p className="text-gray-700 text-xs">{announcementTexts.marathi}</p>
+                  </div>
+                  
+                  {/* Gujarati */}
+                  <div className="border border-gray-200 rounded-none p-2">
+                    <h5 className="font-medium text-gray-900 mb-1 text-xs">ગુજરાતી</h5>
+                    <p className="text-gray-700 text-xs">{announcementTexts.gujarati}</p>
+                  </div>
+                  
+                  {/* Play Button */}
+                  <div className="flex justify-end gap-2 mt-2">
+                    {mergedAudioPath && (
+                      <>
+                        <button
+                          onClick={handlePlayAnnouncement}
+                          className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center gap-1"
+                        >
+                          <Volume2 className="h-3 w-3" />
+                          Play Announcement
+                        </button>
+                        <button
+                          onClick={handleStopAnnouncement}
+                          className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-none hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 flex items-center gap-1"
+                        >
+                          <Square className="h-3 w-3" />
+                          Stop Announcement
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (currentAudio) {
+                          currentAudio.pause();
+                          currentAudio.currentTime = 0;
+                          setCurrentAudio(null);
+                        }
+                        setShowAnnouncementModal(false);
+                        setMergedAudioPath(null);
+                      }}
+                      className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Right Panel - ISL Video Area */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">ISL Announcement</h4>
+                  
+                  <div className="border border-gray-200 rounded-none p-2 bg-gray-50">
+                    <div className="aspect-video bg-black rounded-none flex items-center justify-center">
+                      <div className="text-center text-white">
+                        <div className="text-2xl mb-1">👋</div>
+                        <p className="text-xs">ISL Video Player</p>
+                        <p className="text-xs text-gray-400">Indian Sign Language</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">ISL Video Status:</span>
+                        <span className="text-xs text-gray-500">Ready to Play</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Duration:</span>
+                        <span className="text-xs text-gray-500">--:--</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-center gap-2">
+                    <button
+                      className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 flex items-center gap-1"
+                    >
+                      <Volume2 className="h-3 w-3" />
+                      Play ISL Video
+                    </button>
+                    <button
+                      className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    >
+                      Pause
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Modal */}
+      {showProgressModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/3 lg:w-1/4 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-center mb-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+              
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Generating Announcement
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {progressMessage}
                 </p>
               </div>
-            )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
 
     </div>

@@ -46,7 +46,7 @@ export default function AnnouncementAudios() {
   const [previousFinalCount, setPreviousFinalCount] = useState(0);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [expandedTemplates, setExpandedTemplates] = useState<Set<number>>(new Set());
-  const [activeTab, setActiveTab] = useState<'audio-files' | 'announcement-segments' | 'final-announcements'>('audio-files');
+  const [activeTab, setActiveTab] = useState<'audio-files' | 'announcement-segments' | 'final-announcements'>('announcement-segments');
 
   useEffect(() => {
     fetchAudioFiles();
@@ -497,16 +497,7 @@ export default function AnnouncementAudios() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('audio-files')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'audio-files'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Audio Files ({audioFiles.length})
-          </button>
+
           <button
             onClick={() => setActiveTab('announcement-segments')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -550,108 +541,7 @@ export default function AnnouncementAudios() {
         </div>
       </div>
 
-      {/* Audio Files Tab */}
-      {activeTab === 'audio-files' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {filteredAudioFiles.length === 0 ? (
-            <div className="text-center py-12">
-              <Volume2 className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No announcement audios found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm ? 'Try adjusting your search terms.' : 'No audio files have been generated yet.'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Announcement Text
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Languages
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredAudioFiles.map((audio) => (
-                    <tr key={audio.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900 max-w-md truncate">
-                          {audio.english_text}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          {audio.english_audio_path && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              English
-                            </span>
-                          )}
-                          {audio.marathi_audio_path && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              Marathi
-                            </span>
-                          )}
-                          {audio.hindi_audio_path && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Hindi
-                            </span>
-                          )}
-                          {audio.gujarati_audio_path && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                              Gujarati
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(audio.created_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          {audio.english_audio_path && (
-                            <button
-                              onClick={() => handlePlayAudio(audio.english_audio_path!, 'English')}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Play English"
-                            >
-                              <Play className="h-4 w-4" />
-                            </button>
-                          )}
-                          {audio.english_audio_path && (
-                            <button
-                              onClick={() => handleDownloadAudio(audio.english_audio_path!, 'English', audio.english_text)}
-                              className="text-green-600 hover:text-green-900"
-                              title="Download English"
-                            >
-                              <Download className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleDeleteAudio(audio.id, audio.english_text)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Delete Audio"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+
 
       {/* Announcement Segments Tab */}
       {activeTab === 'announcement-segments' && (

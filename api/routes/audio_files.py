@@ -8,6 +8,7 @@ import asyncio
 from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
 from google.oauth2 import service_account
+from pydantic import BaseModel
 
 import sys
 import os
@@ -190,6 +191,10 @@ class AudioFileBulkDeleteRequest(BaseModel):
 class SingleLanguageAudioRequest(BaseModel):
     text: str
     language: str  # 'english', 'marathi', 'hindi', 'gujarati'
+
+class MergeAudioRequest(BaseModel):
+    audio_files: List[str]
+    output_filename: str
 
 @router.post("/")
 async def create_audio_file(
@@ -816,4 +821,48 @@ async def get_audio_file_status(audio_file_id: int, db: Session = Depends(get_db
             "hindi": audio_file.hindi_translation,
             "gujarati": audio_file.gujarati_translation
         }
-    } 
+    }
+
+@router.post("/merge")
+async def merge_audio_files(request: MergeAudioRequest):
+    """Merge multiple audio files into a single file"""
+    try:
+        import subprocess
+        from pydub import AudioSegment
+        
+        # Create output directory if it doesn't exist
+        output_dir = "/var/www/audio_files/merged"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Full path for output file
+        output_path = os.path.join(output_dir, request.output_filename)
+        
+        # Load and concatenate audio files
+        combined = AudioSegment.empty()
+        
+        for audio_file in request.audio_files:
+            if audio_file and os.path.exists(audio_file):
+                # Load audio file
+                audio = AudioSegment.from_file(audio_file)
+                # Add to combined audio
+                combined += audio
+                # Add a small silence between segments
+                combined += AudioSegment.silent(duration=500)  # 0.5 second silence
+            else:
+                print(f"Warning: Audio file not found: {audio_file}")
+        
+        # Export the combined audio
+        combined.export(output_path, format="wav")
+        
+        # Return the relative path for the frontend
+        relative_path = f"/audio_files/merged/{request.output_filename}"
+        
+        return {
+            "message": "Audio files merged successfully",
+            "audio_path": relative_path,
+            "output_filename": request.output_filename
+        }
+        
+    except Exception as e:
+        print(f"Error merging audio files: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to merge audio files: {str(e)}")
