@@ -96,15 +96,15 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar */}
-          <aside className="hidden md:block w-64 flex-shrink-0">
-            <nav className="space-y-2">
+          <aside className="hidden md:block w-48 flex-shrink-0">
+            <nav className="space-y-1">
               {navigationItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => onTabChange(item.id)}
-                  className={`w-full flex items-center space-x-2 px-3 py-2 rounded-none text-left transition-all duration-200 text-sm ${
+                  className={`w-full flex items-center space-x-2 px-2 py-1.5 rounded-none text-left transition-all duration-200 text-sm ${
                     activeTab === item.id
                       ? 'bg-blue-50 text-blue-700 border-r-4 border-blue-700 shadow-sm'
                       : 'text-gray-600 hover:bg-white hover:shadow-sm'

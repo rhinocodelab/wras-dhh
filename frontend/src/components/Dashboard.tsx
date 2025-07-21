@@ -33,11 +33,21 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const [availableTemplates, setAvailableTemplates] = useState<{ [key: string]: number }>({});
 
   const announcementCategories = [
-    'Arrival',
-    'Delay', 
-    'Platform Change',
-    'Cancellation'
+    'arrival',
+    'delay', 
+    'platform_change',
+    'cancellation'
   ];
+
+  const getCategoryDisplayName = (category: string) => {
+    const displayNames: { [key: string]: string } = {
+      'arrival': 'Arrival',
+      'delay': 'Delay',
+      'platform_change': 'Platform Change',
+      'cancellation': 'Cancellation'
+    };
+    return displayNames[category] || category;
+  };
 
   // Load available templates on component mount
   useEffect(() => {
@@ -395,13 +405,13 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <select
-                            value={categoryValues[route.id] || 'Arrival'}
+                            value={categoryValues[route.id] || 'arrival'}
                             onChange={(e) => handleCategoryChange(route.id, e.target.value)}
                             className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                           >
                             {announcementCategories.map((category) => (
                               <option key={category} value={category}>
-                                {category}
+                                {getCategoryDisplayName(category)}
                               </option>
                             ))}
                           </select>

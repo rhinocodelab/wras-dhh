@@ -38,8 +38,8 @@ fi
 print_status "Starting Audio Files Environment Setup..."
 
 # Update package list
-print_status "Updating package list..."
-sudo apt update
+#print_status "Updating package list..."
+#sudo apt update
 
 # Function to check Apache2 installation
 check_apache2_installation() {
@@ -72,8 +72,8 @@ check_apache2_installation() {
 }
 
 # Install and verify Apache2 installation
-print_status "Installing and verifying Apache2..."
-sudo apt install -y apache2 apache2-utils libapache2-mod-wsgi-py3
+#print_status "Installing and verifying Apache2..."
+#sudo apt install -y apache2 apache2-utils libapache2-mod-wsgi-py3
 
 # Verify Apache2 installation
 if ! check_apache2_installation; then

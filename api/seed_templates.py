@@ -55,19 +55,26 @@ def seed_templates():
             "category": "cancellation",
             "title": "Train Cancellation Announcement",
             "english_text": "Attention please! Train number {train_number} {train_name} from {start_station_name} to {end_station_name} has been cancelled. We regret the inconvenience caused."
+        },
+        {
+            "category": "platform_change",
+            "title": "Platform Change Announcement",
+            "english_text": "Attention please! Train number {train_number} {train_name} from {start_station_name} to {end_station_name} will depart from platform number {platform_number}. Please proceed to the new platform immediately."
         }
     ]
     
     db = SessionLocal()
     
     try:
-        # Check if templates already exist
+        # Clear existing templates
         existing_count = db.query(AnnouncementTemplate).count()
         if existing_count > 0:
-            print(f"⚠️  Database already contains {existing_count} templates. Skipping seeding.")
-            return
+            print(f"🗑️  Clearing {existing_count} existing templates...")
+            db.query(AnnouncementTemplate).delete()
+            db.commit()
+            print(f"✅ Cleared {existing_count} existing templates")
         
-        print("📝 Creating sample templates...")
+        print("📝 Creating new sample templates...")
         
         for template_data in sample_templates:
             print(f"🔄 Processing: {template_data['title']}")
@@ -100,11 +107,11 @@ def seed_templates():
         
         # Commit all changes
         db.commit()
-        print(f"🎉 Successfully seeded {len(sample_templates)} templates!")
+        print(f"🎉 Successfully created {len(sample_templates)} new templates!")
         
         # Display summary
         print("\n📊 Database Summary:")
-        for category in ['arrival', 'delay', 'cancellation']:
+        for category in ['arrival', 'delay', 'cancellation', 'platform_change']:
             count = db.query(AnnouncementTemplate).filter(
                 AnnouncementTemplate.category == category
             ).count()

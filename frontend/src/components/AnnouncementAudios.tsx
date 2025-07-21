@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, Search, Play, Download, Trash2, RefreshCw } from 'lucide-react';
+import { Volume2, Search, Play, Download, Trash2, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from './ToastContainer';
 
 interface AudioFile {
@@ -45,6 +45,7 @@ export default function AnnouncementAudios() {
   const [finalAnnouncements, setFinalAnnouncements] = useState<any[]>([]);
   const [previousFinalCount, setPreviousFinalCount] = useState(0);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [expandedTemplates, setExpandedTemplates] = useState<Set<number>>(new Set());
   const [activeTab, setActiveTab] = useState<'audio-files' | 'announcement-segments' | 'final-announcements'>('audio-files');
 
   useEffect(() => {
@@ -420,6 +421,28 @@ export default function AnnouncementAudios() {
     }
   };
 
+  const toggleTemplateExpansion = (templateId: number) => {
+    setExpandedTemplates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(templateId)) {
+        newSet.delete(templateId);
+      } else {
+        newSet.add(templateId);
+      }
+      return newSet;
+    });
+  };
+
+  const formatLanguageDisplay = (language: string) => {
+    const languageMap: { [key: string]: string } = {
+      'english': 'English',
+      'hindi': 'Hindi',
+      'marathi': 'Marathi',
+      'gujarati': 'Gujarati'
+    };
+    return languageMap[language.toLowerCase()] || language.charAt(0).toUpperCase() + language.slice(1).toLowerCase();
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -452,7 +475,7 @@ export default function AnnouncementAudios() {
               fetchAudioFiles();
               fetchAnnouncementSegments();
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             <RefreshCw className="h-4 w-4" />
             Refresh All
@@ -463,7 +486,7 @@ export default function AnnouncementAudios() {
             }}
             disabled={isRefreshingFinal}
             title="Refresh Final Announcements (Ctrl+R)"
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshingFinal ? 'animate-spin' : ''}`} />
             Refresh Final
@@ -662,56 +685,73 @@ export default function AnnouncementAudios() {
               
               {announcementSegments.map((templateSegment) => (
               <div key={templateSegment.template_id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Template ID: {templateSegment.template_id} - {templateSegment.category}
-                  </h3>
-                </div>
-                <div className="p-6">
-                  {Object.entries(templateSegment.languages).map(([language, segments]) => (
-                    <div key={language} className="mb-6 last:mb-0">
-                      <h4 className="text-md font-medium text-gray-900 mb-3 capitalize">{language}</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {segments.map((segment) => (
-                          <div key={segment.id} className="border border-gray-200 rounded-lg p-4">
-                            <div className="flex items-start justify-between mb-2">
-                              <span className="text-xs font-medium text-gray-500">Segment {segment.segment_order}</span>
-                              <span className="text-xs text-gray-500">{segment.file_size ? `${Math.round(segment.file_size / 1024)}KB` : 'N/A'}</span>
-                            </div>
-                            <p className="text-sm text-gray-900 mb-3 line-clamp-2">{segment.segment_text}</p>
-                            <div className="flex items-center gap-2">
-                              {segment.audio_path && (
-                                <>
-                                  <button
-                                    onClick={() => handlePlayAudio(segment.audio_path!, language)}
-                                    className="text-blue-600 hover:text-blue-900"
-                                    title={`Play ${language}`}
-                                  >
-                                    <Play className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDownloadAudio(segment.audio_path!, language, segment.segment_text)}
-                                    className="text-green-600 hover:text-green-900"
-                                    title={`Download ${language}`}
-                                  >
-                                    <Download className="h-4 w-4" />
-                                  </button>
-                                </>
-                              )}
-                              <button
-                                onClick={() => handleDeleteSegment(segment.id)}
-                                className="text-red-600 hover:text-red-900"
-                                title="Delete Segment"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                <div 
+                  className="bg-gray-50 px-6 py-3 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => toggleTemplateExpansion(templateSegment.template_id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      Template ID: {templateSegment.template_id} - {templateSegment.category}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">
+                        {Object.values(templateSegment.languages).reduce((total, segments) => total + segments.length, 0)} segments
+                      </span>
+                      {expandedTemplates.has(templateSegment.template_id) ? (
+                        <ChevronDown className="h-5 w-5 text-gray-500" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-gray-500" />
+                      )}
                     </div>
-                  ))}
+                  </div>
                 </div>
+                {expandedTemplates.has(templateSegment.template_id) && (
+                  <div className="p-6">
+                    {Object.entries(templateSegment.languages).map(([language, segments]) => (
+                      <div key={language} className="mb-6 last:mb-0">
+                        <h4 className="text-md font-medium text-gray-900 mb-3 capitalize">{language}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {segments.map((segment) => (
+                            <div key={segment.id} className="border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-start justify-between mb-2">
+                                <span className="text-xs font-medium text-gray-500">Segment {segment.segment_order}</span>
+                                <span className="text-xs text-gray-500">{segment.file_size ? `${Math.round(segment.file_size / 1024)}KB` : 'N/A'}</span>
+                              </div>
+                              <p className="text-sm text-gray-900 mb-3 line-clamp-2">{segment.segment_text}</p>
+                              <div className="flex items-center gap-2">
+                                {segment.audio_path && (
+                                  <>
+                                    <button
+                                      onClick={() => handlePlayAudio(segment.audio_path!, language)}
+                                      className="text-blue-600 hover:text-blue-900"
+                                      title={`Play ${language}`}
+                                    >
+                                      <Play className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDownloadAudio(segment.audio_path!, language, segment.segment_text)}
+                                      className="text-green-600 hover:text-green-900"
+                                      title={`Download ${language}`}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteSegment(segment.id)}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="Delete Segment"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             </>
@@ -796,8 +836,8 @@ export default function AnnouncementAudios() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 capitalize">
                           {announcement.category}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
-                          {announcement.language}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatLanguageDisplay(announcement.language)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {announcement.template_id}

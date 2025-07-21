@@ -633,10 +633,18 @@ async def list_final_announcements():
                 # Parse filename: final_announcement_{category}_{language}_{timestamp}_{template_id}.mp3
                 parts = filename.replace('.mp3', '').split('_')
                 if len(parts) >= 6:
-                    category = parts[2]
-                    language = parts[3]
-                    timestamp = parts[4]
-                    template_id = parts[5]
+                    # Handle platform_change category specially
+                    if parts[2] == 'platform' and parts[3] == 'change':
+                        category = 'platform_change'
+                        language = parts[4]
+                        timestamp = parts[5]
+                        template_id = parts[6] if len(parts) > 6 else parts[5]
+                    else:
+                        # Standard parsing for other categories
+                        category = parts[2]
+                        language = parts[3]
+                        timestamp = parts[4]
+                        template_id = parts[5]
                     
                     announcements.append({
                         "filename": filename,

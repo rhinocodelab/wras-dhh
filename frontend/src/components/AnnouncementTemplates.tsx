@@ -46,7 +46,7 @@ interface AudioFile {
 const ANNOUNCEMENT_CATEGORIES = [
   { id: 'arrival', name: 'Arrival' },
   { id: 'delay', name: 'Delay' },
-  { id: 'platform-change', name: 'Platform Change' },
+  { id: 'platform_change', name: 'Platform Change' },
   { id: 'cancellation', name: 'Cancellation' },
   { id: 'general', name: 'General' },
 ];
