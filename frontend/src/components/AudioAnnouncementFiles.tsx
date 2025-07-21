@@ -580,7 +580,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
 
       {/* Create Audio File Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Create Audio File</h3>
@@ -646,7 +646,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && fileToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Delete Audio File</h3>
@@ -704,7 +704,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
 
       {/* Full Text Modal */}
       {currentFile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-4xl w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Audio File #{currentFile.id} - Full Text</h3>

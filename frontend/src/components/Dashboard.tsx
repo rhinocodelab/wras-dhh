@@ -49,6 +49,10 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const [progressMessage, setProgressMessage] = useState('');
   const [mergedAudioPath, setMergedAudioPath] = useState<string | null>(null);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [showPickTrainModal, setShowPickTrainModal] = useState(false);
+  const [allTrainRoutes, setAllTrainRoutes] = useState<TrainRoute[]>([]);
+  const [selectedTrains, setSelectedTrains] = useState<Set<number>>(new Set());
+  const [isLoadingTrains, setIsLoadingTrains] = useState(false);
 
   const announcementCategories = [
     'arrival',
@@ -87,6 +91,76 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
     
     loadAvailableTemplates();
   }, []);
+
+  // Load all train routes for pick train modal
+  const loadAllTrainRoutes = async () => {
+    try {
+      setIsLoadingTrains(true);
+      const response = await fetch('http://localhost:3001/api/train-routes/all', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('API response data:', data);
+        setAllTrainRoutes(data.routes || []);
+      } else {
+        const errorData = await response.json();
+        console.error('API error response:', errorData);
+        throw new Error('Failed to load train routes');
+      }
+    } catch (error) {
+      console.error('Error loading train routes:', error);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load train routes'
+      });
+    } finally {
+      setIsLoadingTrains(false);
+    }
+  };
+
+  const handlePickTrainClick = () => {
+    setShowPickTrainModal(true);
+    loadAllTrainRoutes();
+  };
+
+  const handleTrainSelection = (trainId: number) => {
+    setSelectedTrains(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(trainId)) {
+        newSet.delete(trainId);
+      } else {
+        newSet.add(trainId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleAddSelectedTrains = () => {
+    const selectedTrainData = allTrainRoutes.filter(train => selectedTrains.has(train.id));
+    console.log('Selected train data:', selectedTrainData);
+    
+    setSearchResults(prev => {
+      const existingIds = new Set(prev.map(train => train.id));
+      const newTrains = selectedTrainData.filter(train => !existingIds.has(train.id));
+      const updatedResults = [...prev, ...newTrains];
+      console.log('Updated search results:', updatedResults);
+      return updatedResults;
+    });
+    
+    setHasSearched(true); // Ensure results are shown
+    setSelectedTrains(new Set());
+    setShowPickTrainModal(false);
+    addToast({
+      type: 'success',
+      title: 'Trains Added',
+      message: `${selectedTrainData.length} train(s) added to search results`
+    });
+  };
 
   const stats = [
     {
@@ -505,7 +579,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Search Train Routes</h3>
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative w-64">
+          <div className="relative w-80">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-gray-400" />
             </div>
@@ -543,11 +617,18 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
               </>
             )}
           </button>
+          <button
+            onClick={handlePickTrainClick}
+            className="px-4 py-2 bg-green-600 text-white text-sm rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 flex items-center justify-center gap-2"
+          >
+            <Route className="h-4 w-4" />
+            Pick Train Route
+          </button>
         </div>
       </div>
 
       {/* Search Results */}
-      {hasSearched && (
+      {(hasSearched || searchResults.length > 0) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {searchResults.length > 0 ? (
             <div className="overflow-x-auto">
@@ -555,7 +636,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
-                      Train Number
+                      Train No.
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
                       Train Name
@@ -570,7 +651,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                       Platform
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">
-                      Announcement Category
+                      Category
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
                       Actions
@@ -649,7 +730,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                           <button
                             onClick={() => handleGenerateAudio(route)}
                             disabled={generatingAudio.has(route.id)}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="hidden inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {generatingAudio.has(route.id) ? (
                               <>
@@ -665,10 +746,10 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                           </button>
                           <button
                             onClick={() => handleAnnouncementClick(route)}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                            className="inline-flex items-center justify-center p-1 text-sm font-medium text-green-600 hover:text-green-800 hover:bg-green-50 rounded-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                            title="Announcement"
                           >
-                            <Volume2 className="h-3 w-3" />
-                            Announcement
+                            <Volume2 className="h-5 w-5" />
                           </button>
                         </div>
                       </td>
@@ -691,7 +772,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
 
       {/* Announcement Modal */}
       {showAnnouncementModal && selectedRoute && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="fixed inset-0 overflow-y-auto h-full w-full z-50">
           <div className="relative top-10 mx-auto p-3 border w-11/12 md:w-3/4 lg:w-2/3 shadow-lg rounded-md bg-white">
             <div className="mt-2">
               <div className="flex items-center justify-between mb-3">
@@ -827,7 +908,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
 
       {/* Progress Modal */}
       {showProgressModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="fixed inset-0 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/3 lg:w-1/4 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <div className="flex items-center justify-center mb-4">
@@ -843,6 +924,122 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pick Train Route Modal */}
+      {showPickTrainModal && (
+        <div className="fixed inset-0 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-6 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Pick Train Routes
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPickTrainModal(false);
+                  setSelectedTrains(new Set());
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600">
+                Select multiple train routes to add to your search results. You can select/deselect by clicking on the checkboxes.
+              </p>
+            </div>
+
+            {isLoadingTrains ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-gray-600">Loading train routes...</span>
+              </div>
+            ) : (
+              <>
+                <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-md">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            checked={selectedTrains.size === allTrainRoutes.length && allTrainRoutes.length > 0}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTrains(new Set(allTrainRoutes.map(train => train.id)));
+                              } else {
+                                setSelectedTrains(new Set());
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Train Number
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Train Name
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Route
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {allTrainRoutes.map((train) => (
+                        <tr key={train.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={selectedTrains.has(train.id)}
+                              onChange={() => handleTrainSelection(train.id)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {train.train_number}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                            {train.train_name}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                            {train.start_station_name} → {train.end_station_name}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="flex justify-between items-center mt-4">
+                  <div className="text-sm text-gray-600">
+                    {selectedTrains.size} of {allTrainRoutes.length} trains selected
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowPickTrainModal(false);
+                        setSelectedTrains(new Set());
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddSelectedTrains}
+                      disabled={selectedTrains.size === 0}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Add Selected Trains ({selectedTrains.size})
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -1315,7 +1315,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingRoute ? 'Edit Train Route' : 'Add New Train Route'}
@@ -1407,7 +1407,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">Import Train Routes from Excel</h3>
