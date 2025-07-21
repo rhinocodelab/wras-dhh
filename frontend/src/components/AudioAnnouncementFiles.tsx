@@ -393,7 +393,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Audio Files</h1>
-          <p className="text-gray-600 mt-1">Convert English text to audio files in multiple languages</p>
+          <p className="text-gray-600 mt-1 text-xs">Convert English text to audio files in multiple languages</p>
         </div>
         <div className="flex items-center space-x-2">
           <button

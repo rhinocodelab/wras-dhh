@@ -555,7 +555,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Dashboard</h2>
-        <p className="text-gray-600">Welcome to the Western Railway Announcement System for Deaf and Hard of Hearing</p>
+        <p className="text-gray-600 text-xs">Welcome to the Western Railway Announcement System for Deaf and Hard of Hearing</p>
       </div>
 
       {/* Stats Grid */}

@@ -649,7 +649,7 @@ export default function AnnouncementTemplates() {
         addToast({
           type: 'success',
           title: 'Audio Generation Started',
-          message: `Audio segments generation started for "${template.title}". You can monitor progress in the Announcement Audios section.`
+          message: `Audio segments generation started for "${template.title}". You can monitor progress in the Announcement Segments section.`
         });
       }
     } catch (error: any) {
@@ -669,7 +669,7 @@ export default function AnnouncementTemplates() {
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Announcement Templates</h2>
-        <p className="text-gray-600">Pre-defined announcement templates in multiple languages for railway announcements</p>
+        <p className="text-gray-600 text-xs">Pre-defined announcement templates in multiple languages for railway announcements</p>
       </div>
 
       {/* Combined Category Selection and Templates */}

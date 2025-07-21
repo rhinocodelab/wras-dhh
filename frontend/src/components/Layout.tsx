@@ -18,7 +18,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
     { id: 'stations', label: 'Stations', icon: MapPin },
     { id: 'routes', label: 'Train Routes', icon: Route },
     { id: 'templates', label: 'Announcement Templates', icon: FileText },
-    { id: 'announcement-audios', label: 'Announcement Audios', icon: Volume2 },
+    { id: 'announcement-audios', label: 'Announcement Segments', icon: Volume2 },
     { id: 'audio-files', label: 'Audio Files', icon: Volume2 },
   ];
 
@@ -98,7 +98,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar */}
-          <aside className="hidden md:block w-48 flex-shrink-0">
+          <aside className="hidden md:block w-56 flex-shrink-0">
             <nav className="space-y-1">
               {navigationItems.map((item) => (
                 <button

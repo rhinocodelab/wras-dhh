@@ -887,7 +887,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Station Management</h2>
-          <p className="text-gray-600">Manage railway stations and their codes</p>
+          <p className="text-gray-600 text-xs">Manage railway stations and their codes</p>
         </div>
         <div className="flex items-center space-x-2">
           <button

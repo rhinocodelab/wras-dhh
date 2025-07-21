@@ -466,8 +466,8 @@ export default function AnnouncementAudios() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Announcement Audios</h1>
-          <p className="text-gray-600 mt-1">Manage and play announcement audio files and segments</p>
+          <h1 className="text-2xl font-bold text-gray-900">Announcement Segments</h1>
+          <p className="text-gray-600 mt-1 text-xs">Manage and play announcement audio files and segments</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -770,7 +770,7 @@ export default function AnnouncementAudios() {
       <div className="text-sm text-gray-600">
         {activeTab === 'audio-files' && (
           <>
-            Showing {filteredAudioFiles.length} of {audioFiles.length} announcement audios
+            Showing {filteredAudioFiles.length} of {audioFiles.length} announcement segments
             {searchTerm && ` matching "${searchTerm}"`}
           </>
         )}
