@@ -79,7 +79,7 @@ router.get('/all', authenticateToken, async (req, res) => {
 // Create new station
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { station_name, station_code } = req.body;
+    const { station_name, station_code, station_name_hi, station_name_mr, station_name_gu } = req.body;
 
     if (!station_name || !station_code) {
       return res.status(400).json({ error: 'Station name and code are required' });
@@ -92,8 +92,8 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const result = await dbRun(
-      'INSERT INTO stations (station_name, station_code) VALUES (?, ?)',
-      [station_name, station_code.toUpperCase()]
+      'INSERT INTO stations (station_name, station_code, station_name_hi, station_name_mr, station_name_gu) VALUES (?, ?, ?, ?, ?)',
+      [station_name, station_code.toUpperCase(), station_name_hi || station_name, station_name_mr || station_name, station_name_gu || station_name]
     );
 
     const newStation = await dbGet('SELECT * FROM stations WHERE id = ?', [result.lastID]);
@@ -108,7 +108,7 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { station_name, station_code } = req.body;
+    const { station_name, station_code, station_name_hi, station_name_mr, station_name_gu } = req.body;
 
     if (!station_name || !station_code) {
       return res.status(400).json({ error: 'Station name and code are required' });
@@ -121,8 +121,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     await dbRun(
-      'UPDATE stations SET station_name = ?, station_code = ? WHERE id = ?',
-      [station_name, station_code.toUpperCase(), id]
+      'UPDATE stations SET station_name = ?, station_code = ?, station_name_hi = ?, station_name_mr = ?, station_name_gu = ? WHERE id = ?',
+      [station_name, station_code.toUpperCase(), station_name_hi || station_name, station_name_mr || station_name, station_name_gu || station_name, id]
     );
 
     const updatedStation = await dbGet('SELECT * FROM stations WHERE id = ?', [id]);

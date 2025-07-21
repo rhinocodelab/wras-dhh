@@ -97,7 +97,7 @@ router.get('/all', authenticateToken, async (req, res) => {
 // Create new train route
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { train_number, train_name, start_station_id, end_station_id } = req.body;
+    const { train_number, train_name, train_name_hi, train_name_mr, train_name_gu, start_station_id, end_station_id } = req.body;
 
     if (!train_number || !train_name || !start_station_id || !end_station_id) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -122,8 +122,8 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const result = await dbRun(
-      'INSERT INTO train_routes (train_number, train_name, start_station_id, end_station_id) VALUES (?, ?, ?, ?)',
-      [train_number, train_name, start_station_id, end_station_id]
+      'INSERT INTO train_routes (train_number, train_name, train_name_hi, train_name_mr, train_name_gu, start_station_id, end_station_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [train_number, train_name, train_name_hi || train_name, train_name_mr || train_name, train_name_gu || train_name, start_station_id, end_station_id]
     );
 
     const newRoute = await dbGet(`
@@ -150,7 +150,7 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { train_number, train_name, start_station_id, end_station_id } = req.body;
+    const { train_number, train_name, train_name_hi, train_name_mr, train_name_gu, start_station_id, end_station_id } = req.body;
 
     if (!train_number || !train_name || !start_station_id || !end_station_id) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -175,8 +175,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     await dbRun(
-      'UPDATE train_routes SET train_number = ?, train_name = ?, start_station_id = ?, end_station_id = ? WHERE id = ?',
-      [train_number, train_name, start_station_id, end_station_id, id]
+      'UPDATE train_routes SET train_number = ?, train_name = ?, train_name_hi = ?, train_name_mr = ?, train_name_gu = ?, start_station_id = ?, end_station_id = ? WHERE id = ?',
+      [train_number, train_name, train_name_hi || train_name, train_name_mr || train_name, train_name_gu || train_name, start_station_id, end_station_id, id]
     );
 
     const updatedRoute = await dbGet(`

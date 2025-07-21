@@ -85,7 +85,13 @@ class ApiService {
     }
   }
 
-  async createStation(data: { station_name: string; station_code: string }) {
+  async createStation(data: { 
+    station_name: string; 
+    station_code: string;
+    station_name_hi?: string;
+    station_name_mr?: string;
+    station_name_gu?: string;
+  }) {
     try {
       const response = await fetch(`${API_BASE_URL}/stations`, {
         method: 'POST',
@@ -101,7 +107,13 @@ class ApiService {
     }
   }
 
-  async updateStation(id: number, data: { station_name: string; station_code: string }) {
+  async updateStation(id: number, data: { 
+    station_name: string; 
+    station_code: string;
+    station_name_hi?: string;
+    station_name_mr?: string;
+    station_name_gu?: string;
+  }) {
     try {
       const response = await fetch(`${API_BASE_URL}/stations/${id}`, {
         method: 'PUT',
@@ -191,6 +203,9 @@ class ApiService {
   async createTrainRoute(data: {
     train_number: string;
     train_name: string;
+    train_name_hi?: string;
+    train_name_mr?: string;
+    train_name_gu?: string;
     start_station_id: number;
     end_station_id: number;
   }) {
@@ -212,6 +227,9 @@ class ApiService {
   async updateTrainRoute(id: number, data: {
     train_number: string;
     train_name: string;
+    train_name_hi?: string;
+    train_name_mr?: string;
+    train_name_gu?: string;
     start_station_id: number;
     end_station_id: number;
   }) {

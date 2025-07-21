@@ -27,6 +27,9 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
   const [formData, setFormData] = useState({
     train_number: '',
     train_name: '',
+    train_name_hi: '',
+    train_name_mr: '',
+    train_name_gu: '',
     start_station_id: '',
     end_station_id: ''
   });
@@ -101,7 +104,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
       await fetchData();
       setShowModal(false);
       setEditingRoute(null);
-      setFormData({ train_number: '', train_name: '', start_station_id: '', end_station_id: '' });
+      setFormData({ train_number: '', train_name: '', train_name_hi: '', train_name_mr: '', train_name_gu: '', start_station_id: '', end_station_id: '' });
       onDataChange?.();
       addToast({
         type: 'success',
@@ -125,6 +128,9 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
     setFormData({
       train_number: route.train_number,
       train_name: route.train_name,
+      train_name_hi: route.train_name_hi || route.train_name,
+      train_name_mr: route.train_name_mr || route.train_name,
+      train_name_gu: route.train_name_gu || route.train_name,
       start_station_id: route.start_station_id.toString(),
       end_station_id: route.end_station_id.toString()
     });
@@ -827,6 +833,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
   const validateImportData = (data: any[]) => {
     const errors: string[] = [];
     const requiredColumns = ['Train Number', 'Train Name', 'Start Station', 'Start Station Code', 'End Station', 'End Station Code'];
+    const optionalColumns = ['Train Name (Hindi)', 'Train Name (Marathi)', 'Train Name (Gujarati)'];
     
     if (data.length === 0) {
       errors.push('Excel file is empty');
@@ -903,6 +910,9 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
         return apiService.createTrainRoute({
           train_number: row['Train Number'].toString(),
           train_name: row['Train Name'].toString(),
+          train_name_hi: row['Train Name (Hindi)']?.toString() || row['Train Name'].toString(),
+          train_name_mr: row['Train Name (Marathi)']?.toString() || row['Train Name'].toString(),
+          train_name_gu: row['Train Name (Gujarati)']?.toString() || row['Train Name'].toString(),
           start_station_id: startStation.id,
           end_station_id: endStation.id
         });
@@ -956,7 +966,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
           <button
             onClick={() => {
               setEditingRoute(null);
-              setFormData({ train_number: '', train_name: '', start_station_id: '', end_station_id: '' });
+              setFormData({ train_number: '', train_name: '', train_name_hi: '', train_name_mr: '', train_name_gu: '', start_station_id: '', end_station_id: '' });
               setShowModal(true);
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
@@ -1172,6 +1182,13 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                           <div className="text-sm font-medium text-gray-900">{route.train_name}</div>
                           <div className="text-sm text-gray-500">#{route.train_number}</div>
                         </div>
+                        {(route.train_name_hi || route.train_name_mr || route.train_name_gu) && (
+                          <div className="ml-2 text-xs text-gray-500">
+                            <span title={`Hindi: ${route.train_name_hi || 'Not set'}\nMarathi: ${route.train_name_mr || 'Not set'}\nGujarati: ${route.train_name_gu || 'Not set'}`}>
+                              🌐
+                            </span>
+                          </div>
+                        )}
                         {routesWithAudio.has(route.id) && (
                           <div title="Audio generated">
                             <Flag className="h-4 w-4 text-green-600" />
@@ -1347,6 +1364,52 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   required
                 />
               </div>
+              
+              {/* Multilingual Train Names */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Multilingual Train Names (Optional)</h4>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Train Name (Hindi)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.train_name_hi}
+                      onChange={(e) => setFormData({ ...formData, train_name_hi: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter Hindi train name"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Train Name (Marathi)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.train_name_mr}
+                      onChange={(e) => setFormData({ ...formData, train_name_mr: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter Marathi train name"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Train Name (Gujarati)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.train_name_gu}
+                      onChange={(e) => setFormData({ ...formData, train_name_gu: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter Gujarati train name"
+                    />
+                  </div>
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Start Station
@@ -1446,9 +1509,10 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                     <Upload className="h-3 w-3" />
                     <span>Choose Excel File</span>
                   </label>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Upload an Excel file with columns: Train Number, Train Name, Start Station, Start Station Code, End Station, End Station Code
-                  </p>
+                                  <p className="text-sm text-gray-500 mt-2">
+                  Upload an Excel file with required columns: Train Number, Train Name, Start Station, Start Station Code, End Station, End Station Code<br/>
+                  Optional columns: Train Name (Hindi), Train Name (Marathi), Train Name (Gujarati)
+                </p>
                 </div>
               </div>
 
@@ -1464,6 +1528,12 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                     <li><strong>Start Station Code</strong> - Starting station code (e.g., NDLS)</li>
                     <li><strong>End Station</strong> - Destination station name</li>
                     <li><strong>End Station Code</strong> - Destination station code (e.g., MMCT)</li>
+                  </ul>
+                  <p className="mt-2 text-xs font-medium text-blue-700">Optional columns:</p>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    <li><strong>Train Name (Hindi)</strong> - Train name in Hindi</li>
+                    <li><strong>Train Name (Marathi)</strong> - Train name in Marathi</li>
+                    <li><strong>Train Name (Gujarati)</strong> - Train name in Gujarati</li>
                   </ul>
                   <p className="mt-2 text-xs">
                     Note: Station names must match existing stations in the system

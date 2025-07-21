@@ -25,7 +25,10 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     station_name: '',
-    station_code: ''
+    station_code: '',
+    station_name_hi: '',
+    station_name_mr: '',
+    station_name_gu: ''
   });
   const [error, setError] = useState<string | null>(null);
   const [generatingAudio, setGeneratingAudio] = useState<Set<number>>(new Set());
@@ -98,7 +101,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       await fetchStations();
       setShowModal(false);
       setEditingStation(null);
-      setFormData({ station_name: '', station_code: '' });
+      setFormData({ station_name: '', station_code: '', station_name_hi: '', station_name_mr: '', station_name_gu: '' });
       onDataChange?.();
       addToast({
         type: 'success',
@@ -121,7 +124,10 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
     setEditingStation(station);
     setFormData({
       station_name: station.station_name,
-      station_code: station.station_code
+      station_code: station.station_code,
+      station_name_hi: station.station_name_hi || station.station_name,
+      station_name_mr: station.station_name_mr || station.station_name,
+      station_name_gu: station.station_name_gu || station.station_name
     });
     setShowModal(true);
   };
@@ -793,6 +799,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
   const validateImportData = (data: any[]) => {
     const errors: string[] = [];
     const requiredColumns = ['Station Name', 'Station Code'];
+    const optionalColumns = ['Station Name (Hindi)', 'Station Name (Marathi)', 'Station Name (Gujarati)'];
     
     if (data.length === 0) {
       errors.push('Excel file is empty');
@@ -845,7 +852,10 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       const importPromises = importData.map(async (row) => {
         return apiService.createStation({
           station_name: row['Station Name'].toString(),
-          station_code: row['Station Code'].toString().toUpperCase()
+          station_code: row['Station Code'].toString().toUpperCase(),
+          station_name_hi: row['Station Name (Hindi)']?.toString() || row['Station Name'].toString(),
+          station_name_mr: row['Station Name (Marathi)']?.toString() || row['Station Name'].toString(),
+          station_name_gu: row['Station Name (Gujarati)']?.toString() || row['Station Name'].toString()
         });
       });
 
@@ -893,7 +903,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
           <button
             onClick={() => {
               setEditingStation(null);
-              setFormData({ station_name: '', station_code: '' });
+              setFormData({ station_name: '', station_code: '', station_name_hi: '', station_name_mr: '', station_name_gu: '' });
               setShowModal(true);
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
@@ -1091,6 +1101,13 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                           </div>
                         )}
                       </div>
+                      {(station.station_name_hi || station.station_name_mr || station.station_name_gu) && (
+                        <div className="ml-2 text-xs text-gray-500">
+                          <span title={`Hindi: ${station.station_name_hi || 'Not set'}\nMarathi: ${station.station_name_mr || 'Not set'}\nGujarati: ${station.station_name_gu || 'Not set'}`}>
+                            🌐
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -1255,6 +1272,52 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                   required
                 />
               </div>
+              
+              {/* Multilingual Station Names */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Multilingual Station Names (Optional)</h4>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Station Name (Hindi)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.station_name_hi}
+                      onChange={(e) => setFormData({ ...formData, station_name_hi: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter Hindi station name"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Station Name (Marathi)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.station_name_mr}
+                      onChange={(e) => setFormData({ ...formData, station_name_mr: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter Marathi station name"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Station Name (Gujarati)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.station_name_gu}
+                      onChange={(e) => setFormData({ ...formData, station_name_gu: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Enter Gujarati station name"
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
@@ -1316,7 +1379,8 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                     <span>Choose Excel File</span>
                   </label>
                   <p className="text-sm text-gray-500 mt-2">
-                    Upload an Excel file with columns: Station Name, Station Code
+                    Upload an Excel file with required columns: Station Name, Station Code<br/>
+                    Optional columns: Station Name (Hindi), Station Name (Marathi), Station Name (Gujarati)
                   </p>
                 </div>
               </div>

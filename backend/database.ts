@@ -64,6 +64,9 @@ export async function initializeDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         station_name TEXT NOT NULL,
         station_code TEXT UNIQUE NOT NULL,
+        station_name_hi TEXT,
+        station_name_mr TEXT,
+        station_name_gu TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -74,6 +77,9 @@ export async function initializeDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         train_number TEXT UNIQUE NOT NULL,
         train_name TEXT NOT NULL,
+        train_name_hi TEXT,
+        train_name_mr TEXT,
+        train_name_gu TEXT,
         start_station_id INTEGER NOT NULL,
         end_station_id INTEGER NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
