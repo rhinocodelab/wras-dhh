@@ -974,9 +974,6 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                 <h3 className="text-base font-semibold text-gray-900">
                   Announcement for {selectedRoute.train_name} ({selectedRoute.train_number})
                 </h3>
-                <div className="text-xs text-gray-500">
-                  Using template segments + placeholder audio + merged playback
-                </div>
                 <button
                   onClick={async () => {
                     if (currentAudio) {
