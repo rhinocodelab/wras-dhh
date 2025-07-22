@@ -65,6 +65,10 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const [islVideoPath, setIslVideoPath] = useState<string | null>(null);
   const [isGeneratingISLVideo, setIsGeneratingISLVideo] = useState(false);
   const [islVideoStatus, setIslVideoStatus] = useState<string>('Ready to Generate');
+  const [generatedFiles, setGeneratedFiles] = useState<{
+    audioFile?: string;
+    videoFile?: string;
+  }>({});
 
   const announcementCategories = [
     'arrival',
@@ -467,6 +471,12 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
           // Store the merged audio path for the modal
           setMergedAudioPath(mergedAudio.audio_path);
           
+          // Store the audio file path for cleanup
+          setGeneratedFiles(prev => ({
+            ...prev,
+            audioFile: mergedAudio.audio_path
+          }));
+          
           // Calculate reuse statistics
           const existingCount = audioFiles.filter(file => file.is_existing).length;
           const newCount = audioFiles.filter(file => !file.is_existing).length;
@@ -527,6 +537,60 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
     }
   };
 
+  const cleanupGeneratedFiles = async () => {
+    try {
+      console.log('🔄 Starting cleanup process...');
+      console.log('📁 Current generated files:', generatedFiles);
+      
+      const filesToDelete = [];
+      
+      // Add audio file to deletion list
+      if (generatedFiles.audioFile) {
+        filesToDelete.push(generatedFiles.audioFile);
+        console.log('🎵 Added audio file to delete:', generatedFiles.audioFile);
+      }
+      
+      // Add video file to deletion list
+      if (generatedFiles.videoFile) {
+        filesToDelete.push(generatedFiles.videoFile);
+        console.log('🎬 Added video file to delete:', generatedFiles.videoFile);
+      }
+      
+      // Delete files from server
+      for (const filePath of filesToDelete) {
+        try {
+          console.log(`🗑️ Attempting to delete: ${filePath}`);
+          const response = await fetch('http://localhost:5001/api/cleanup-file', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              file_path: filePath
+            }),
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log(`✅ Successfully deleted: ${filePath}`, result);
+          } else {
+            const errorData = await response.json();
+            console.warn(`❌ Failed to delete: ${filePath}`, errorData);
+          }
+        } catch (error) {
+          console.error(`💥 Error deleting file ${filePath}:`, error);
+        }
+      }
+      
+      // Clear generated files state
+      setGeneratedFiles({});
+      console.log('✅ Cleanup process completed');
+      
+    } catch (error) {
+      console.error('💥 Error during cleanup:', error);
+    }
+  };
+
   const generateISLVideo = async (announcementText: string) => {
     try {
       setIsGeneratingISLVideo(true);
@@ -552,6 +616,11 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       if (data.success) {
         setIslVideoPath(data.video_url);
         setIslVideoStatus(`Generated with ${data.words_processed}/${data.total_words} words`);
+        // Store the video file path for cleanup
+        setGeneratedFiles(prev => ({
+          ...prev,
+          videoFile: `/final_isl_vid/${data.video_filename}`
+        }));
         addToast({
           type: 'success',
           title: 'ISL Video Generated',
@@ -870,7 +939,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                   Announcement for {selectedRoute.train_name} ({selectedRoute.train_number})
                 </h3>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (currentAudio) {
                       currentAudio.pause();
                       currentAudio.currentTime = 0;
@@ -880,6 +949,8 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                     setMergedAudioPath(null);
                     setIslVideoPath(null);
                     setIslVideoStatus('Ready to Generate');
+                    // Clean up generated files
+                    await cleanupGeneratedFiles();
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -937,7 +1008,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                       </>
                     )}
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (currentAudio) {
                           currentAudio.pause();
                           currentAudio.currentTime = 0;
@@ -947,6 +1018,8 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                         setMergedAudioPath(null);
                         setIslVideoPath(null);
                         setIslVideoStatus('Ready to Generate');
+                        // Clean up generated files
+                        await cleanupGeneratedFiles();
                       }}
                       className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
                     >

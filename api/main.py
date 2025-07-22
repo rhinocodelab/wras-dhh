@@ -73,6 +73,9 @@ class MultiLanguageTTSRequest(BaseModel):
 class ISLVideoRequest(BaseModel):
     announcement_text: str
 
+class CleanupFileRequest(BaseModel):
+    file_path: str
+
 @app.get("/")
 async def root():
     return {"message": "WRAS-DHH Translation API is running"}
@@ -465,6 +468,55 @@ async def generate_isl_video(request: ISLVideoRequest):
     except Exception as e:
         print(f"Unexpected error in ISL video generation: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error during ISL video generation")
+
+@app.delete("/api/cleanup-file")
+async def cleanup_file(request: CleanupFileRequest):
+    """
+    Delete a generated file (audio or video) from the server
+    """
+    try:
+        # Determine the file type and construct the full path
+        file_path = request.file_path
+        print(f"🗑️ Cleanup request for file: {file_path}")
+        
+        # Handle different file types
+        if file_path.startswith('/audio_files/'):
+            # Audio file in /var/www/audio_files/
+            full_path = f"/var/www{file_path}"
+            print(f"🎵 Audio file detected, full path: {full_path}")
+        elif file_path.startswith('/final_isl_vid/'):
+            # ISL video file in /var/www/final_isl_vid/
+            full_path = f"/var/www{file_path}"
+            print(f"🎬 ISL video file detected, full path: {full_path}")
+        else:
+            # Assume it's a relative path or direct path
+            full_path = file_path
+            print(f"📁 Direct path assumed: {full_path}")
+        
+        # Check if file exists
+        print(f"🔍 Checking if file exists: {full_path}")
+        if not os.path.exists(full_path):
+            print(f"❌ File not found: {full_path}")
+            return {
+                "success": False,
+                "message": f"File not found: {file_path}"
+            }
+        
+        print(f"✅ File exists, attempting to delete: {full_path}")
+        # Delete the file
+        os.remove(full_path)
+        print(f"🗑️ File deleted successfully: {full_path}")
+        
+        return {
+            "success": True,
+            "message": f"File deleted successfully: {file_path}"
+        }
+        
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: Cannot delete file {request.file_path}")
+    except Exception as e:
+        print(f"Error deleting file {request.file_path}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 # Mount static files for audio serving
 try:
