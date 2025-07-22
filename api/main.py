@@ -70,6 +70,9 @@ class MultiLanguageTTSRequest(BaseModel):
     text: str
     source_language: str  # "en", "hi", "mr", "gu"
 
+class ISLVideoRequest(BaseModel):
+    announcement_text: str
+
 @app.get("/")
 async def root():
     return {"message": "WRAS-DHH Translation API is running"}
@@ -340,6 +343,129 @@ app.include_router(announcement_audio.router, prefix="/api", tags=["announcement
 # Include final announcement routes
 app.include_router(final_announcement.router, prefix="/api", tags=["final-announcement"])
 
+@app.post("/generate-isl-video")
+async def generate_isl_video(request: ISLVideoRequest):
+    """
+    Generate ISL video from announcement text by combining individual word videos
+    """
+    try:
+        if not request.announcement_text.strip():
+            raise HTTPException(status_code=400, detail="Announcement text cannot be empty")
+        
+        # Step 1: Convert text to lowercase
+        text = request.announcement_text.lower().strip()
+        
+        # Step 2: Split text into words
+        words = text.split()
+        
+        # Step 3: Find matching videos in isl_dataset
+        isl_dataset_path = "isl_dataset"
+        available_videos = []
+        
+        for word in words:
+            # Check if word folder exists in isl_dataset
+            word_folder = os.path.join(isl_dataset_path, word)
+            if os.path.exists(word_folder):
+                # Look for mp4 files in the folder
+                for file in os.listdir(word_folder):
+                    if file.endswith('.mp4'):
+                        video_path = os.path.join(word_folder, file)
+                        available_videos.append(video_path)
+                        break  # Use first mp4 file found
+            else:
+                print(f"Word '{word}' not found in ISL dataset, skipping...")
+        
+        if not available_videos:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No matching ISL videos found for the given text. Available words in dataset: {', '.join(os.listdir(isl_dataset_path))}"
+            )
+        
+        # Step 4: Generate unique output filename
+        import hashlib
+        import time
+        text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+        timestamp = int(time.time())
+        output_filename = f"isl_announcement_{text_hash}_{timestamp}.mp4"
+        
+        # Create final_isl_vid directory if it doesn't exist
+        final_isl_vid_dir = "/var/www/final_isl_vid"
+        try:
+            os.makedirs(final_isl_vid_dir, exist_ok=True)
+            # Test write permissions
+            test_file = os.path.join(final_isl_vid_dir, "test_write.tmp")
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+        except PermissionError:
+            raise HTTPException(status_code=500, detail=f"Permission denied: Cannot write to {final_isl_vid_dir}. Please check directory permissions.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error creating directory {final_isl_vid_dir}: {str(e)}")
+        
+        output_path = os.path.join(final_isl_vid_dir, output_filename)
+        
+        # Step 5: Use ffmpeg to concatenate videos
+        try:
+            import subprocess
+            
+            # Create a temporary file list for ffmpeg
+            temp_list_file = f"temp_video_list_{timestamp}.txt"
+            with open(temp_list_file, 'w') as f:
+                for video_path in available_videos:
+                    f.write(f"file '{video_path}'\n")
+            
+            # Run ffmpeg command to concatenate videos
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', temp_list_file,
+                '-c', 'copy',
+                output_path,
+                '-y'  # Overwrite output file if it exists
+            ]
+            
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            
+            # Clean up temporary file
+            os.remove(temp_list_file)
+            
+            if result.returncode != 0:
+                print(f"FFmpeg error: {result.stderr}")
+                error_msg = f"FFmpeg failed with return code {result.returncode}"
+                if "Permission denied" in result.stderr:
+                    error_msg = f"Permission denied: Cannot write to output directory. Please check permissions for {final_isl_vid_dir}"
+                elif "No such file or directory" in result.stderr:
+                    error_msg = "Some input video files not found in ISL dataset"
+                else:
+                    error_msg = f"FFmpeg error: {result.stderr[:200]}..."  # Truncate long error messages
+                raise HTTPException(status_code=500, detail=error_msg)
+            
+            # Return the video file
+            if os.path.exists(output_path):
+                return {
+                    "success": True,
+                    "message": f"ISL video generated successfully with {len(available_videos)} words",
+                    "video_filename": output_filename,
+                    "video_url": f"/final_isl_vid/{output_filename}",
+                    "words_processed": len(available_videos),
+                    "total_words": len(words),
+                    "skipped_words": len(words) - len(available_videos)
+                }
+            else:
+                raise HTTPException(status_code=500, detail="Generated video file not found")
+                
+        except subprocess.SubprocessError as e:
+            raise HTTPException(status_code=500, detail=f"FFmpeg processing error: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Video generation error: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Unexpected error in ISL video generation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error during ISL video generation")
+
 # Mount static files for audio serving
 try:
     app.mount("/audio_files", StaticFiles(directory="/var/www/audio_files"), name="audio_files")
@@ -355,6 +481,14 @@ try:
 except Exception as e:
     print(f"⚠️ Could not mount ISL videos: {e}")
     print("ISL videos will not be available")
+
+# Mount static files for final ISL videos
+try:
+    app.mount("/final_isl_vid", StaticFiles(directory="/var/www/final_isl_vid"), name="final_isl_vid")
+    print("✅ Final ISL videos mounted at /final_isl_vid")
+except Exception as e:
+    print(f"⚠️ Could not mount final ISL videos: {e}")
+    print("Final ISL videos will not be available")
 
 # Fallback audio file serving endpoint
 @app.get("/audio_files/{filename}")

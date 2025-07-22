@@ -62,6 +62,9 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const [allTrainRoutes, setAllTrainRoutes] = useState<TrainRoute[]>([]);
   const [selectedTrains, setSelectedTrains] = useState<Set<number>>(new Set());
   const [isLoadingTrains, setIsLoadingTrains] = useState(false);
+  const [islVideoPath, setIslVideoPath] = useState<string | null>(null);
+  const [isGeneratingISLVideo, setIsGeneratingISLVideo] = useState(false);
+  const [islVideoStatus, setIslVideoStatus] = useState<string>('Ready to Generate');
 
   const announcementCategories = [
     'arrival',
@@ -375,6 +378,10 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         
         setAnnouncementTexts(texts);
         
+        // Generate ISL video from English announcement text
+        setProgressMessage('Generating ISL video...');
+        await generateISLVideo(texts.english);
+        
         // Check for existing audio files first, then generate if needed
         setProgressMessage('Checking for existing audio files...');
         
@@ -517,6 +524,52 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       currentAudio.pause();
       currentAudio.currentTime = 0;
       setCurrentAudio(null);
+    }
+  };
+
+  const generateISLVideo = async (announcementText: string) => {
+    try {
+      setIsGeneratingISLVideo(true);
+      setIslVideoStatus('Generating ISL Video...');
+      
+      const response = await fetch('http://localhost:5001/generate-isl-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          announcement_text: announcementText
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to generate ISL video');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setIslVideoPath(data.video_url);
+        setIslVideoStatus(`Generated with ${data.words_processed}/${data.total_words} words`);
+        addToast({
+          type: 'success',
+          title: 'ISL Video Generated',
+          message: `Successfully generated ISL video with ${data.words_processed} words`
+        });
+      } else {
+        throw new Error(data.message || 'Failed to generate ISL video');
+      }
+    } catch (error: any) {
+      console.error('Error generating ISL video:', error);
+      setIslVideoStatus('Generation Failed');
+      addToast({
+        type: 'error',
+        title: 'ISL Video Generation Failed',
+        message: error.message || 'Failed to generate ISL video'
+      });
+    } finally {
+      setIsGeneratingISLVideo(false);
     }
   };
 
@@ -825,6 +878,8 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                     }
                     setShowAnnouncementModal(false);
                     setMergedAudioPath(null);
+                    setIslVideoPath(null);
+                    setIslVideoStatus('Ready to Generate');
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -890,6 +945,8 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                         }
                         setShowAnnouncementModal(false);
                         setMergedAudioPath(null);
+                        setIslVideoPath(null);
+                        setIslVideoStatus('Ready to Generate');
                       }}
                       className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
                     >
@@ -903,39 +960,81 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                   <h4 className="text-sm font-semibold text-gray-900 mb-2">ISL Announcement</h4>
                   
                   <div className="border border-gray-200 rounded-none p-2 bg-gray-50">
-                    <div className="aspect-video bg-black rounded-none flex items-center justify-center">
-                      <div className="text-center text-white">
-                        <div className="text-2xl mb-1">👋</div>
-                        <p className="text-xs">ISL Video Player</p>
-                        <p className="text-xs text-gray-400">Indian Sign Language</p>
+                    {islVideoPath ? (
+                      <div className="aspect-video bg-black rounded-none flex items-center justify-center">
+                        <video
+                          src={`http://localhost:5001${islVideoPath}`}
+                          controls
+                          className="w-full h-full object-contain"
+                          onError={() => {
+                            addToast({
+                              type: 'error',
+                              title: 'Video Error',
+                              message: 'Failed to load ISL video'
+                            });
+                          }}
+                        />
                       </div>
-                    </div>
+                    ) : (
+                      <div className="aspect-video bg-black rounded-none flex items-center justify-center">
+                        <div className="text-center text-white">
+                          {isGeneratingISLVideo ? (
+                            <>
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                              <p className="text-xs">Generating ISL Video...</p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-2xl mb-1">👋</div>
+                              <p className="text-xs">ISL Video Player</p>
+                              <p className="text-xs text-gray-400">Indian Sign Language</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="mt-2 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-600">ISL Video Status:</span>
-                        <span className="text-xs text-gray-500">Ready to Play</span>
+                        <span className="text-xs text-gray-500">{islVideoStatus}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Duration:</span>
-                        <span className="text-xs text-gray-500">--:--</span>
+                        <span className="text-xs text-gray-600">Video:</span>
+                        <span className="text-xs text-gray-500">
+                          {islVideoPath ? 'Available' : 'Not Generated'}
+                        </span>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex justify-center gap-2">
-                    <button
-                      className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 flex items-center gap-1"
-                    >
-                      <Volume2 className="h-3 w-3" />
-                      Play ISL Video
-                    </button>
-                    <button
-                      className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-                    >
-                      Pause
-                    </button>
-                  </div>
+                  {islVideoPath && (
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={() => {
+                          const video = document.querySelector('video');
+                          if (video) {
+                            video.play();
+                          }
+                        }}
+                        className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 flex items-center gap-1"
+                      >
+                        <Volume2 className="h-3 w-3" />
+                        Play ISL Video
+                      </button>
+                      <button
+                        onClick={() => {
+                          const video = document.querySelector('video');
+                          if (video) {
+                            video.pause();
+                          }
+                        }}
+                        className="px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-none hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                      >
+                        Pause
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
