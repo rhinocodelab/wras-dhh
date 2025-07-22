@@ -906,39 +906,33 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
               setFormData({ station_name: '', station_code: '', station_name_hi: '', station_name_mr: '', station_name_gu: '' });
               setShowModal(true);
             }}
-            className="bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
+            className="bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none transition-colors text-sm"
+            title="Add a new railway station to the database. You can enter the station name, code, and optional multilingual names in Hindi, Marathi, and Gujarati."
           >
-            <Plus className="h-3 w-3" />
-            <span>Add Station</span>
+            Add Station
           </button>
           <button
             onClick={() => setShowImportModal(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
+            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-none transition-colors text-sm"
+            title="Import multiple stations from an Excel file. The file should have columns for Station Name and Station Code. Optional columns for multilingual names (Hindi, Marathi, Gujarati) are also supported."
           >
-            <Upload className="h-3 w-3" />
-            <span>Import</span>
+            Import
           </button>
           {stations.length > 0 && (
             <>
               <button
                 onClick={handleGenerateAudioForAll}
                 disabled={generatingAudio.size > 0 || isGeneratingAllAudio || queueProgress.isProcessing}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-none transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Generate audio files for all stations in the database. This will create audio announcements for each station in multiple languages (English, Marathi, Hindi, Gujarati). The process runs in the background and you can monitor progress in the queue below."
               >
-                {isGeneratingAllAudio ? (
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                ) : (
-                  <FileAudio className="h-3 w-3" />
-                )}
-                <span>
-                  {isGeneratingAllAudio 
-                    ? (setupProgress.isSettingUp 
-                        ? `Setting up... (${setupProgress.currentStep}/${setupProgress.totalSteps})`
-                        : 'Setting up queue...'
-                      )
-                    : 'Generate Audio for All Stations'
-                  }
-                </span>
+                {isGeneratingAllAudio 
+                  ? (setupProgress.isSettingUp 
+                      ? `Setting up... (${setupProgress.currentStep}/${setupProgress.totalSteps})`
+                      : 'Setting up queue...'
+                    )
+                  : 'Generate Audio'
+                }
               </button>
               {queueProgress.isProcessing && (
                 <div className="flex items-center space-x-2 px-3 py-1.5 bg-[#e1e9f2] text-[#2e6da4] rounded-none text-sm">
@@ -948,10 +942,10 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
               )}
               <button
                 onClick={handleClearAll}
-                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-none transition-colors text-sm"
+                title="Delete all stations from the database. This action cannot be undone. All station data, including multilingual names and associated audio files, will be permanently removed."
               >
-                <Trash className="h-3 w-3" />
-                <span>Clear All</span>
+                Clear All
               </button>
             </>
           )}
@@ -975,15 +969,16 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
         <button
           onClick={handleSearch}
           disabled={isLoading}
-          className="bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Search for stations by name or station code. The search is case-insensitive and will match partial text."
         >
-          <Search className="h-3 w-3" />
-          <span>Search</span>
+          Search
         </button>
         {searchTerm && (
           <button
             onClick={handleClearSearch}
             className="text-gray-700 border border-gray-300 rounded-none hover:bg-gray-50 px-3 py-1.5 transition-colors text-sm"
+            title="Clear the search field and show all stations in the database."
           >
             Clear
           </button>
@@ -1069,92 +1064,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
 
       {/* Stations Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Station
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Code
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStations.map((station) => (
-                <tr key={station.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <MapPin className="h-5 w-5 text-gray-400 mr-3" />
-                      <div className="flex items-center">
-                        <div className="text-sm font-medium text-gray-900">{station.station_name}</div>
-                        {stationsWithAudio.has(station.id) && (
-                          <div title="Audio files available">
-                            <Flag className="h-3 w-3 text-green-600 ml-2" />
-                          </div>
-                        )}
-                      </div>
-                      {(station.station_name_hi || station.station_name_mr || station.station_name_gu) && (
-                        <div className="ml-2 text-xs text-gray-500">
-                          <span title={`Hindi: ${station.station_name_hi || 'Not set'}\nMarathi: ${station.station_name_mr || 'Not set'}\nGujarati: ${station.station_name_gu || 'Not set'}`}>
-                            🌐
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#e1e9f2] text-[#2e6da4]">
-                      {station.station_code}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(station.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => handleGenerateAudio(station)}
-                        disabled={generatingAudio.has(station.id)}
-                        className="text-purple-600 hover:text-purple-900 p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Generate Audio"
-                      >
-                        {generatingAudio.has(station.id) ? (
-                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
-                        ) : (
-                          <FileAudio className="h-3 w-3" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleEdit(station)}
-                        className="text-[#337ab7] hover:text-[#1e4a6b] p-0.5"
-                        title="Edit Station"
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(station.id)}
-                        className="text-red-600 hover:text-red-900 p-0.5"
-                        title="Delete Station"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredStations.length === 0 && (
+        {filteredStations.length === 0 ? (
           <div className="text-center py-12">
             <MapPin className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">No stations found</h3>
@@ -1162,80 +1072,140 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
               {searchQuery ? 'Try adjusting your search terms' : 'Get started by creating a new station'}
             </p>
           </div>
-        )}
-      </div>
-
-      {/* Pagination Controls */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white px-6 py-3 border-t border-gray-200">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-700">
-              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, pagination.total)} of {pagination.total} stations
-            </span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="text-sm border border-gray-300 rounded px-2 py-1"
-            >
-              <option value={5}>5 per page</option>
-              <option value={7}>7 per page</option>
-              <option value={10}>10 per page</option>
-              <option value={20}>20 per page</option>
-              <option value={50}>50 per page</option>
-            </select>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={!pagination.hasPrev}
-              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            
-            <div className="flex items-center space-x-1">
-              {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                let pageNum;
-                if (pagination.totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= pagination.totalPages - 2) {
-                  pageNum = pagination.totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1 text-sm rounded ${
-                      currentPage === pageNum
-                        ? 'bg-[#337ab7] text-white'
-                        : 'border border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
+        ) : (
+          <>
+            <div>
+              <table className="w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Station
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Code
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Created
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredStations.map((station) => (
+                    <tr key={station.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <MapPin className="h-5 w-5 text-gray-400 mr-3" />
+                          <div className="flex items-center">
+                            <div className="text-sm font-medium text-gray-900">{station.station_name}</div>
+                            {stationsWithAudio.has(station.id) && (
+                              <div title="Audio files available">
+                                <Flag className="h-3 w-3 text-green-600 ml-2" />
+                              </div>
+                            )}
+                          </div>
+                          {(station.station_name_hi || station.station_name_mr || station.station_name_gu) && (
+                            <div className="ml-2 text-xs text-gray-500">
+                              <span title={`Hindi: ${station.station_name_hi || 'Not set'}\nMarathi: ${station.station_name_mr || 'Not set'}\nGujarati: ${station.station_name_gu || 'Not set'}`}>
+                                🌐
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#e1e9f2] text-[#2e6da4]">
+                          {station.station_code}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(station.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleGenerateAudio(station)}
+                            disabled={generatingAudio.has(station.id)}
+                            className="text-purple-600 hover:text-purple-900 p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Generate Audio"
+                          >
+                            {generatingAudio.has(station.id) ? (
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600"></div>
+                            ) : (
+                              <FileAudio className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleEdit(station)}
+                            className="text-[#337ab7] hover:text-[#1e4a6b] p-0.5"
+                            title="Edit Station"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(station.id)}
+                            className="text-red-600 hover:text-red-900 p-0.5"
+                            title="Delete Station"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             
-            <button
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={!pagination.hasNext}
-              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+            {/* Pagination Controls */}
+            {pagination.totalPages > 1 && (
+              <div className="bg-white px-6 py-3 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, pagination.total)} of {pagination.total} stations
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={!pagination.hasPrev}
+                      className="px-3 py-1 text-sm border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    
+                    {/* Page Numbers */}
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-1 text-sm border ${
+                            currentPage === page
+                              ? 'bg-[#337ab7] text-white border-[#337ab7]'
+                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={!pagination.hasNext}
+                      className="px-3 py-1 text-sm border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Modal */}
       {showModal && (

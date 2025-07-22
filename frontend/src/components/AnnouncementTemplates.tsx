@@ -712,14 +712,10 @@ export default function AnnouncementTemplates() {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => copyToClipboard(template.englishText, template.id)}
-                      className="flex items-center space-x-1 px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-xs transition-colors"
+                      className="px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-xs transition-colors"
+                      title="Copy the English template text to clipboard"
                     >
-                      {copiedId === template.id ? (
-                        <Check className="h-3 w-3" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                      <span>Copy</span>
+                      {copiedId === template.id ? 'Copied!' : 'Copy'}
                     </button>
                     {template.translations.Marathi && (
                       <>
@@ -729,14 +725,14 @@ export default function AnnouncementTemplates() {
                             setShowSaveModal(true);
                           }}
                           disabled={template.isSaved}
-                          className={`flex items-center space-x-1 px-2 py-1 rounded-none text-xs transition-colors ${
+                          className={`px-2 py-1 rounded-none text-xs transition-colors ${
                             template.isSaved
                               ? 'bg-green-100 text-green-700 cursor-not-allowed'
                               : 'bg-green-600 text-white hover:bg-green-700'
                           }`}
+                          title={template.isSaved ? 'Template is already saved to database' : 'Save this template to the database for future use'}
                         >
-                          <Save className="h-3 w-3" />
-                          <span>{template.isSaved ? 'Saved' : 'Save'}</span>
+                          {template.isSaved ? 'Saved' : 'Save'}
                         </button>
 
                       </>
@@ -745,34 +741,25 @@ export default function AnnouncementTemplates() {
                       <>
                         <button
                           onClick={() => editTemplate(template)}
-                          className="flex items-center space-x-1 px-2 py-1 bg-yellow-600 text-white rounded-none hover:bg-yellow-700 text-xs transition-colors"
+                          className="px-2 py-1 bg-yellow-600 text-white rounded-none hover:bg-yellow-700 text-xs transition-colors"
+                          title="Edit this template's English text and update translations"
                         >
-                          <Edit2 className="h-3 w-3" />
-                          <span>Edit</span>
+                          Edit
                         </button>
                         <button
                           onClick={() => generateAudioSegments(template)}
                           disabled={generatingAudioForTemplate === template.dbId}
-                          className="flex items-center space-x-1 px-2 py-1 bg-indigo-600 text-white rounded-none hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors"
+                          className="px-2 py-1 bg-purple-600 text-white rounded-none hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors"
+                          title="Generate audio files for this template in all supported languages (English, Marathi, Hindi, Gujarati)"
                         >
-                          {generatingAudioForTemplate === template.dbId ? (
-                            <>
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                              <span>Generating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Volume2 className="h-3 w-3" />
-                              <span>Generate Audio</span>
-                            </>
-                          )}
+                          {generatingAudioForTemplate === template.dbId ? 'Generating...' : 'Generate Audio'}
                         </button>
                         <button
                           onClick={() => deleteTemplateFromDatabase(template)}
-                          className="flex items-center space-x-1 px-2 py-1 bg-red-600 text-white rounded-none hover:bg-red-700 text-xs transition-colors"
+                          className="px-2 py-1 bg-red-600 text-white rounded-none hover:bg-red-700 text-xs transition-colors"
+                          title="Delete this template from the database. This action cannot be undone."
                         >
-                          <Trash2 className="h-3 w-3" />
-                          <span>Delete</span>
+                          Delete
                         </button>
                       </>
                     )}
@@ -791,6 +778,7 @@ export default function AnnouncementTemplates() {
                         onClick={() => translateTemplate(template)}
                         disabled={isLoading}
                         className="px-2 py-1 text-xs bg-green-600 text-white rounded-none hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        title="Translate this template to Marathi, Hindi, and Gujarati languages"
                       >
                         {isLoading ? 'Translating...' : 'Translate'}
                       </button>
@@ -831,6 +819,7 @@ export default function AnnouncementTemplates() {
                               <button
                                 onClick={() => copyToClipboard(translation, `${template.id}-${language}`)}
                                 className="ml-2 p-1 text-gray-500 hover:text-gray-700"
+                                title={`Copy ${language} translation to clipboard`}
                               >
                                 <Copy className="h-3 w-3" />
                               </button>
@@ -1057,6 +1046,7 @@ export default function AnnouncementTemplates() {
                         stopAudio();
                       }}
                       className="px-4 py-2 text-gray-700 border border-gray-300 rounded-none hover:bg-gray-50"
+                      title="Close the audio generation modal"
                     >
                       Close
                     </button>
@@ -1065,6 +1055,7 @@ export default function AnnouncementTemplates() {
                         onClick={generateAudioFromSelectedText}
                         disabled={isGeneratingAudio}
                         className="px-4 py-2 bg-purple-600 text-white rounded-none hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Generate audio files for the selected text in all supported languages (English, Marathi, Hindi, Gujarati)"
                       >
                         {isGeneratingAudio ? 'Generating...' : 'Generate Audio Files'}
                       </button>
@@ -1114,6 +1105,7 @@ export default function AnnouncementTemplates() {
                   setEditingTemplate(null);
                 }}
                 className="px-3 py-1.5 text-gray-700 border border-gray-300 rounded-none hover:bg-gray-50 text-sm"
+                title="Cancel saving the template and close the modal"
               >
                 Cancel
               </button>
@@ -1121,6 +1113,7 @@ export default function AnnouncementTemplates() {
                 onClick={() => saveTemplateToDatabase(editingTemplate)}
                 disabled={isLoading}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-none hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Save this template to the database for future use and management"
               >
                 {isLoading ? 'Saving...' : 'Save to Database'}
               </button>
@@ -1183,13 +1176,15 @@ export default function AnnouncementTemplates() {
                   setEditingText('');
                 }}
                 className="px-3 py-1.5 text-gray-700 border border-gray-300 rounded-none hover:bg-gray-50 text-sm"
+                title="Cancel editing and close the modal without saving changes"
               >
                 Cancel
               </button>
               <button
                 onClick={updateTemplateInDatabase}
                 disabled={isLoading || !editingText.trim()}
-                className="px-3 py-1.5 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="px-3 py-1.5 bg-purple-600 text-white rounded-none hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Update the template text and automatically re-translate to all supported languages"
               >
                 {isLoading ? 'Updating...' : 'Update & Re-translate'}
               </button>

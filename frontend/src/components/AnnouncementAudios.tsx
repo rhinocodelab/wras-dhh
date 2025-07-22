@@ -475,9 +475,9 @@ export default function AnnouncementAudios() {
               fetchAudioFiles();
               fetchAnnouncementSegments();
             }}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2"
+            className="px-3 py-1.5 text-sm bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2"
+            title="Refresh all audio files and announcement segments data"
           >
-            <RefreshCw className="h-4 w-4" />
             Refresh All
           </button>
           <button
@@ -485,11 +485,10 @@ export default function AnnouncementAudios() {
               fetchFinalAnnouncements();
             }}
             disabled={isRefreshingFinal}
-            title="Refresh Final Announcements (Ctrl+R)"
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh Final Announcements (Ctrl+R). Updates the list of final announcement files."
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-none hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw className={`h-4 w-4 ${isRefreshingFinal ? 'animate-spin' : ''}`} />
-            Refresh Final
+            {isRefreshingFinal ? 'Refreshing...' : 'Refresh Final'}
           </button>
         </div>
       </div>
@@ -565,9 +564,9 @@ export default function AnnouncementAudios() {
                   <button
                     onClick={clearAllAnnouncementSegments}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-none hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete all announcement segments from the database. This action cannot be undone."
                   >
-                    <Trash2 className="h-4 w-4" />
                     Clear All Segments
                   </button>
                 </div>
@@ -681,17 +680,17 @@ export default function AnnouncementAudios() {
                   <button
                     onClick={clearDynamicContent}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700 focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700 focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Clear legacy dynamic content files from the server. This removes old temporary files."
                   >
-                    <Trash2 className="h-4 w-4" />
                     Clear Legacy Files
                   </button>
                   <button
                     onClick={clearAllFinalAnnouncements}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete all final announcement files from the server. This action cannot be undone."
                   >
-                    <Trash2 className="h-4 w-4" />
                     Clear All
                   </button>
                 </div>

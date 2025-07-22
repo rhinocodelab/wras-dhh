@@ -399,29 +399,25 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
           <button
             onClick={loadAudioFiles}
             disabled={isLoading}
-            className="flex items-center space-x-1 px-2 py-1 bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 text-sm transition-colors"
+            className="px-2 py-1 bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 text-sm transition-colors"
+            title="Refresh the list of audio files from the database"
           >
-            <div className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`}>
-              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
-            <span>Refresh</span>
+            {isLoading ? 'Refreshing...' : 'Refresh'}
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-1 px-2 py-1 bg-[#337ab7] text-white hover:bg-[#2e6da4] text-sm transition-colors"
+            className="px-2 py-1 bg-purple-600 text-white hover:bg-purple-700 text-sm transition-colors"
+            title="Create a new audio file by entering English text. This will generate audio files in all supported languages."
           >
-            <FileAudio className="h-3 w-3" />
-            <span>Create New Audio File</span>
+            Create New Audio File
           </button>
           {audioFiles.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="flex items-center space-x-1 px-2 py-1 bg-red-600 text-white hover:bg-red-700 text-sm transition-colors"
+              className="px-2 py-1 bg-red-600 text-white hover:bg-red-700 text-sm transition-colors"
+              title="Delete all audio files from the database and remove all physical audio files. This action cannot be undone."
             >
-              <Trash2 className="h-3 w-3" />
-              <span>Clear All</span>
+              Clear All
             </button>
           )}
         </div>
@@ -437,6 +433,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 bg-[#337ab7] text-white hover:bg-[#2e6da4] transition-colors"
+              title="Create a new audio file by entering English text. This will generate audio files in all supported languages."
             >
               Create Audio File
             </button>
@@ -473,12 +470,13 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                           }
                         </p>
                         {file.english_text.length > 100 && (
-                          <button
-                            onClick={() => setCurrentFile(file)}
-                            className="text-[#337ab7] hover:text-[#2e6da4] text-xs mt-1"
-                          >
-                            View full text
-                          </button>
+                                                  <button
+                          onClick={() => setCurrentFile(file)}
+                          className="text-[#337ab7] hover:text-[#2e6da4] text-xs mt-1"
+                          title="View the complete English text for this audio file"
+                        >
+                          View full text
+                        </button>
                         )}
                       </div>
                     </td>
@@ -518,10 +516,10 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => confirmDelete(file)}
-                        className="flex items-center space-x-1 px-2 py-1 bg-red-600 text-white hover:bg-red-700 text-xs transition-colors"
+                        className="px-2 py-1 bg-red-600 text-white hover:bg-red-700 text-xs transition-colors"
+                        title="Delete this audio file and all its associated audio files from the database and server"
                       >
-                        <Trash2 className="h-3 w-3" />
-                        <span>Delete</span>
+                        Delete
                       </button>
                     </td>
                   </tr>
@@ -619,25 +617,17 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                 onClick={() => setShowCreateModal(false)}
                 disabled={isGenerating}
                 className="px-4 py-2 text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                title="Cancel creating the audio file and close the modal"
               >
                 Cancel
               </button>
               <button
                 onClick={createAudioFile}
                 disabled={isGenerating || !englishText.trim()}
-                className="flex items-center space-x-2 px-4 py-2 bg-[#337ab7] text-white hover:bg-[#2e6da4] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-[#337ab7] text-white hover:bg-[#2e6da4] disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Create audio files for the entered English text in all supported languages (English, Marathi, Hindi, Gujarati)"
               >
-                {isGenerating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Creating...</span>
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="h-4 w-4" />
-                    <span>Create Audio Files</span>
-                  </>
-                )}
+                {isGenerating ? 'Creating...' : 'Create Audio Files'}
               </button>
             </div>
           </div>
@@ -687,15 +677,16 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                   setFileToDelete(null);
                 }}
                 className="px-4 py-2 text-gray-700 border border-gray-300 hover:bg-gray-50"
+                title="Cancel deleting the audio file and close the modal"
               >
                 Cancel
               </button>
               <button
                 onClick={deleteAudioFile}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white hover:bg-red-700"
+                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700"
+                title="Permanently delete this audio file and all its associated audio files from the database and server"
               >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete Permanently</span>
+                Delete Permanently
               </button>
             </div>
           </div>
@@ -749,6 +740,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
               <button
                 onClick={() => setCurrentFile(null)}
                 className="px-4 py-2 text-gray-700 border border-gray-300 hover:bg-gray-50"
+                title="Close the full text view modal"
               >
                 Close
               </button>
