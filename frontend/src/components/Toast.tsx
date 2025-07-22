@@ -42,12 +42,12 @@ const toastStyles = {
     messageColor: 'text-yellow-700'
   },
   info: {
-    bg: 'bg-blue-50',
-    border: 'border-blue-200',
+    bg: 'bg-[#f0f4f8]',
+    border: 'border-[#c3d4e5]',
     icon: Info,
-    iconColor: 'text-blue-400',
-    titleColor: 'text-blue-800',
-    messageColor: 'text-blue-700'
+    iconColor: 'text-[#5a8bc7]',
+    titleColor: 'text-[#2e6da4]',
+    messageColor: 'text-[#337ab7]'
   }
 };
 

@@ -30,7 +30,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <div className="flex items-center space-x-3">
-                <div className="h-8 w-8 bg-blue-600 rounded-none flex items-center justify-center">
+                <div className="h-8 w-8 bg-[#337ab7] rounded-none flex items-center justify-center">
                   <Train className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -74,7 +74,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
                 }}
                 className={`w-full flex items-center space-x-2 px-2 py-1.5 rounded-md text-left transition-colors text-sm ${
                   activeTab === item.id
-                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                    ? 'bg-[#f0f4f8] text-[#2e6da4] border-r-2 border-[#2e6da4]'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`}
               >
@@ -106,7 +106,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
                   onClick={() => onTabChange(item.id)}
                   className={`w-full flex items-center space-x-2 px-2 py-1.5 rounded-none text-left transition-all duration-200 text-sm ${
                     activeTab === item.id
-                      ? 'bg-blue-50 text-blue-700 border-r-4 border-blue-700 shadow-sm'
+                      ? 'bg-[#f0f4f8] text-[#2e6da4] border-r-4 border-[#2e6da4] shadow-sm'
                       : 'text-gray-600 hover:bg-white hover:shadow-sm'
                   }`}
                 >

@@ -949,7 +949,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#337ab7]"></div>
       </div>
     );
   }
@@ -969,7 +969,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
               setFormData({ train_number: '', train_name: '', train_name_hi: '', train_name_mr: '', train_name_gu: '', start_station_id: '', end_station_id: '' });
               setShowModal(true);
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
+            className="bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm"
           >
             <Plus className="h-3 w-3" />
             <span>Add Route</span>
@@ -1007,8 +1007,8 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                 </span>
               </button>
               {queueProgress.isProcessing && (
-                <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-none text-sm">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                        <div className="flex items-center space-x-2 px-3 py-1.5 bg-[#e1e9f2] text-[#2e6da4] rounded-none text-sm">
+          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#337ab7]"></div>
                   <span>Queue: {queueProgress.current}/{queueProgress.total}</span>
                 </div>
               )}
@@ -1035,13 +1035,13 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
             value={searchTerm}
             onChange={handleSearchChange}
             onKeyPress={handleKeyPress}
-            className="pl-10 pr-4 py-1.5 w-full border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="pl-10 pr-4 py-1.5 w-full border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent"
           />
         </div>
         <button
           onClick={handleSearch}
           disabled={isLoading}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none flex items-center space-x-1 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Search className="h-3 w-3" />
           <span>Search</span>
@@ -1111,17 +1111,17 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
 
       {/* Queue Progress */}
       {(queueProgress.isProcessing || queuePaused) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-[#f0f4f8] border border-[#c3d4e5] rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-medium text-blue-900">Audio Generation Queue</h4>
+            <h4 className="text-sm font-medium text-[#1e4a6b]">Audio Generation Queue</h4>
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-blue-700">
+              <span className="text-sm text-[#337ab7]">
                 {queueProgress.current} / {queueProgress.total} trains
               </span>
               {queueProgress.isProcessing && !queuePaused && (
                 <button
                   onClick={pauseQueue}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  className="text-[#337ab7] hover:text-[#2e6da4] text-sm font-medium"
                 >
                   Pause
                 </button>
@@ -1129,20 +1129,20 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
               {queuePaused && (
                 <button
                   onClick={resumeQueue}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  className="text-[#337ab7] hover:text-[#2e6da4] text-sm font-medium"
                 >
                   Resume
                 </button>
               )}
             </div>
           </div>
-          <div className="w-full bg-blue-200 rounded-full h-2">
+          <div className="w-full bg-[#c3d4e5] rounded-full h-2">
             <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-[#337ab7] h-2 rounded-full transition-all duration-300"
               style={{ width: `${(queueProgress.current / queueProgress.total) * 100}%` }}
             ></div>
           </div>
-          <p className="text-sm text-blue-700 mt-2">
+          <p className="text-sm text-[#337ab7] mt-2">
             {queuePaused 
               ? 'Queue is paused. Click Resume to continue.' 
               : 'Processing trains in batches... Please wait.'
@@ -1229,7 +1229,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                       </button>
                       <button
                         onClick={() => handleEdit(route)}
-                        className="text-blue-600 hover:text-blue-900 p-0.5"
+                        className="text-[#337ab7] hover:text-[#1e4a6b] p-0.5"
                       >
                         <Edit2 className="h-3 w-3" />
                       </button>
@@ -1309,7 +1309,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                     onClick={() => setCurrentPage(pageNum)}
                     className={`px-3 py-1 text-sm rounded ${
                       currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-[#337ab7] text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
@@ -1346,7 +1346,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   type="text"
                   value={formData.train_number}
                   onChange={(e) => setFormData({ ...formData, train_number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent"
                   placeholder="Enter train number"
                   required
                 />
@@ -1359,7 +1359,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   type="text"
                   value={formData.train_name}
                   onChange={(e) => setFormData({ ...formData, train_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent"
                   placeholder="Enter train name"
                   required
                 />
@@ -1378,7 +1378,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                       type="text"
                       value={formData.train_name_hi}
                       onChange={(e) => setFormData({ ...formData, train_name_hi: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent text-sm"
                       placeholder="Enter Hindi train name"
                     />
                   </div>
@@ -1391,7 +1391,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                       type="text"
                       value={formData.train_name_mr}
                       onChange={(e) => setFormData({ ...formData, train_name_mr: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent text-sm"
                       placeholder="Enter Marathi train name"
                     />
                   </div>
@@ -1404,7 +1404,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                       type="text"
                       value={formData.train_name_gu}
                       onChange={(e) => setFormData({ ...formData, train_name_gu: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent text-sm"
                       placeholder="Enter Gujarati train name"
                     />
                   </div>
@@ -1417,7 +1417,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                 <select
                   value={formData.start_station_id}
                   onChange={(e) => setFormData({ ...formData, start_station_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent"
                   required
                 >
                   <option value="">Select start station</option>
@@ -1435,7 +1435,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                 <select
                   value={formData.end_station_id}
                   onChange={(e) => setFormData({ ...formData, end_station_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent"
                   required
                 >
                   <option value="">Select end station</option>
@@ -1458,7 +1458,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-none hover:bg-blue-700 text-sm"
+                  className="px-3 py-1.5 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-sm"
                 >
                   {editingRoute ? 'Update' : 'Create'}
                 </button>
@@ -1504,7 +1504,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   />
                   <label
                     htmlFor="excel-upload"
-                    className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-none inline-flex items-center space-x-1 text-sm"
+                    className="cursor-pointer bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none inline-flex items-center space-x-1 text-sm"
                   >
                     <Upload className="h-3 w-3" />
                     <span>Choose Excel File</span>
@@ -1517,9 +1517,9 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
               </div>
 
               {/* Required Format */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Required Excel Format:</h4>
-                <div className="text-sm text-blue-800">
+              <div className="bg-[#f0f4f8] border border-[#c3d4e5] rounded-lg p-4">
+                <h4 className="font-medium text-[#1e4a6b] mb-2">Required Excel Format:</h4>
+                <div className="text-sm text-[#2e6da4]">
                   <p className="mb-2">Your Excel file must have these exact column headers:</p>
                   <ul className="list-disc list-inside space-y-1">
                     <li><strong>Train Number</strong> - Unique identifier for the train</li>
@@ -1529,7 +1529,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                     <li><strong>End Station</strong> - Destination station name</li>
                     <li><strong>End Station Code</strong> - Destination station code (e.g., MMCT)</li>
                   </ul>
-                  <p className="mt-2 text-xs font-medium text-blue-700">Optional columns:</p>
+                  <p className="mt-2 text-xs font-medium text-[#337ab7]">Optional columns:</p>
                   <ul className="list-disc list-inside space-y-1 text-xs">
                     <li><strong>Train Name (Hindi)</strong> - Train name in Hindi</li>
                     <li><strong>Train Name (Marathi)</strong> - Train name in Marathi</li>

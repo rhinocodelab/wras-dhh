@@ -682,7 +682,7 @@ export default function AnnouncementTemplates() {
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-48 px-3 py-1 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white text-sm"
+                className="w-48 px-3 py-1 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent appearance-none bg-white text-sm"
               >
                 {ANNOUNCEMENT_CATEGORIES.map((category) => (
                   <option key={category.id} value={category.id}>
@@ -712,7 +712,7 @@ export default function AnnouncementTemplates() {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => copyToClipboard(template.englishText, template.id)}
-                      className="flex items-center space-x-1 px-2 py-1 bg-blue-600 text-white rounded-none hover:bg-blue-700 text-xs transition-colors"
+                      className="flex items-center space-x-1 px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-xs transition-colors"
                     >
                       {copiedId === template.id ? (
                         <Check className="h-3 w-3" />
@@ -901,12 +901,12 @@ export default function AnnouncementTemplates() {
               </div>
 
               {/* Text Selection Instructions */}
-              <div className="bg-blue-50 p-4 rounded-none border border-blue-200">
+              <div className="bg-[#f0f4f8] p-4 rounded-none border border-[#c3d4e5]">
                 <div className="flex items-center space-x-2 mb-2">
-                  <Volume2 className="h-5 w-5 text-blue-600" />
-                  <h4 className="font-medium text-blue-900">How to Select Text</h4>
+                  <Volume2 className="h-5 w-5 text-[#337ab7]" />
+                  <h4 className="font-medium text-[#1e4a6b]">How to Select Text</h4>
                 </div>
-                <div className="space-y-2 text-sm text-blue-700">
+                <div className="space-y-2 text-sm text-[#337ab7]">
                   <p>1. <strong>Select text</strong> from the template below by clicking and dragging</p>
                   <p>2. <strong>Click "Translate Selection"</strong> to get translations for the selected text</p>
                   <p>3. <strong>Review translations</strong> and click "Generate Audio" to create audio files</p>
@@ -919,8 +919,8 @@ export default function AnnouncementTemplates() {
                 <h4 className="font-medium text-gray-900">Select Text from Template</h4>
                 
                 <div className="border border-gray-200 rounded-none">
-                  <div className="bg-blue-50 px-4 py-2 border-b border-gray-200">
-                    <h5 className="font-medium text-blue-900">English Template (Click and drag to select text)</h5>
+                  <div className="bg-[#f0f4f8] px-4 py-2 border-b border-gray-200">
+                    <h5 className="font-medium text-[#1e4a6b]">English Template (Click and drag to select text)</h5>
                   </div>
                   <div 
                     className="p-4 cursor-text select-text"
@@ -1148,7 +1148,7 @@ export default function AnnouncementTemplates() {
                 <textarea
                   value={editingText}
                   onChange={(e) => setEditingText(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent resize-none"
                   rows={4}
                   placeholder="Enter the English announcement text..."
                 />
@@ -1189,7 +1189,7 @@ export default function AnnouncementTemplates() {
               <button
                 onClick={updateTemplateInDatabase}
                 disabled={isLoading || !editingText.trim()}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-none hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="px-3 py-1.5 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 {isLoading ? 'Updating...' : 'Update & Re-translate'}
               </button>

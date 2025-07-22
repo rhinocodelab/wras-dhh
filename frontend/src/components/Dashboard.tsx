@@ -167,9 +167,9 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       title: 'Total Stations',
       count: stationCount,
       icon: MapPin,
-      color: 'bg-blue-500',
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-700',
+          color: 'bg-[#337ab7]',
+    bgColor: 'bg-[#f0f4f8]',
+    textColor: 'text-[#337ab7]',
     },
     {
       title: 'Train Routes',
@@ -589,7 +589,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Search by train number or train name..."
-              className="block w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="block w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-[#337ab7]"
             />
             {searchTerm && (
               <button
@@ -603,7 +603,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
           <button
             onClick={handleSearch}
             disabled={isSearching}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          className="px-4 py-2 bg-[#337ab7] text-white text-sm rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSearching ? (
               <>
@@ -690,12 +690,12 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                               onChange={(e) => handlePlatformChange(route.id, e.target.value)}
                               onKeyPress={(e) => handlePlatformKeyPress(e, route.id)}
                               onBlur={() => handlePlatformSave(route.id)}
-                              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-[#337ab7]"
                               autoFocus
                             />
                             <button
                               onClick={() => handlePlatformSave(route.id)}
-                              className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-600 rounded-none hover:bg-blue-50"
+                              className="text-[#337ab7] hover:text-[#2e6da4] text-xs font-medium px-2 py-1 border border-[#337ab7] rounded-none hover:bg-[#f0f4f8]"
                             >
                               Save
                             </button>
@@ -705,7 +705,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                             <span className="font-medium">{platformValues[route.id] || 1}</span>
                             <button
                               onClick={() => handlePlatformEdit(route.id)}
-                              className="text-blue-600 hover:text-blue-800 text-xs font-medium px-2 py-1 border border-blue-600 rounded-none hover:bg-blue-50"
+                              className="text-[#337ab7] hover:text-[#2e6da4] text-xs font-medium px-2 py-1 border border-[#337ab7] rounded-none hover:bg-[#f0f4f8]"
                             >
                               Edit
                             </button>
@@ -716,7 +716,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                         <select
                           value={categoryValues[route.id] || 'arrival'}
                           onChange={(e) => handleCategoryChange(route.id, e.target.value)}
-                          className="px-3 py-1 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          className="px-3 py-1 text-sm border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-[#337ab7] bg-white"
                         >
                           {announcementCategories.map((category) => (
                             <option key={category} value={category}>
@@ -730,7 +730,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                           <button
                             onClick={() => handleGenerateAudio(route)}
                             disabled={generatingAudio.has(route.id)}
-                            className="hidden inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="hidden inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-[#337ab7] rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {generatingAudio.has(route.id) ? (
                               <>
@@ -830,7 +830,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                       <>
                         <button
                           onClick={handlePlayAnnouncement}
-                          className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center gap-1"
+                          className="px-3 py-1 text-xs font-medium text-white bg-[#337ab7] rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#f0f4f8]0 focus:ring-offset-2 flex items-center gap-1"
                         >
                           <Volume2 className="h-3 w-3" />
                           Play Announcement
@@ -912,7 +912,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
           <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/3 lg:w-1/4 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <div className="flex items-center justify-center mb-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#337ab7]"></div>
               </div>
               
               <div className="text-center">
@@ -955,7 +955,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
 
             {isLoadingTrains ? (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#337ab7]"></div>
                 <span className="ml-3 text-gray-600">Loading train routes...</span>
               </div>
             ) : (
@@ -975,7 +975,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                                 setSelectedTrains(new Set());
                               }
                             }}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="rounded border-gray-300 text-[#337ab7] focus:ring-[#f0f4f8]0"
                           />
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -997,7 +997,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                               type="checkbox"
                               checked={selectedTrains.has(train.id)}
                               onChange={() => handleTrainSelection(train.id)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="rounded border-gray-300 text-[#337ab7] focus:ring-[#f0f4f8]0"
                             />
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -1032,7 +1032,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                     <button
                       onClick={handleAddSelectedTrains}
                       disabled={selectedTrains.size === 0}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 text-sm font-medium text-white bg-[#337ab7] rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#f0f4f8]0 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Add Selected Trains ({selectedTrains.size})
                     </button>

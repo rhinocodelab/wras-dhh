@@ -410,7 +410,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-1 px-2 py-1 bg-purple-600 text-white hover:bg-purple-700 text-sm transition-colors"
+            className="flex items-center space-x-1 px-2 py-1 bg-[#337ab7] text-white hover:bg-[#2e6da4] text-sm transition-colors"
           >
             <FileAudio className="h-3 w-3" />
             <span>Create New Audio File</span>
@@ -428,7 +428,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
       </div>
 
       {/* Audio Files Table */}
-      <div className="bg-white shadow-sm border border-gray-200">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {audioFiles.length === 0 ? (
           <div className="text-center py-12">
             <FileAudio className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -436,34 +436,34 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
             <p className="text-gray-600 mb-4">Create your first audio file to get started</p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+              className="px-4 py-2 bg-[#337ab7] text-white hover:bg-[#2e6da4] transition-colors"
             >
               Create Audio File
             </button>
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    English Text
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Audio Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentAudioFiles.map((file) => (
-                  <tr key={file.id} className="border-b border-gray-200 hover:bg-gray-50">
+            <div>
+              <table className="w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      English Text
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Created
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Audio Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentAudioFiles.map((file) => (
+                    <tr key={file.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-900">
                       <div className="max-w-md">
                         <p className="font-mono text-xs bg-gray-50 p-2 border truncate" title={file.english_text}>
@@ -475,7 +475,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                         {file.english_text.length > 100 && (
                           <button
                             onClick={() => setCurrentFile(file)}
-                            className="text-purple-600 hover:text-purple-800 text-xs mt-1"
+                            className="text-[#337ab7] hover:text-[#2e6da4] text-xs mt-1"
                           >
                             View full text
                           </button>
@@ -505,8 +505,8 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                               </button>
                             ) : processingFiles.has(file.id) ? (
                               <div className="flex items-center space-x-1">
-                                <div className="animate-spin rounded-full h-2 w-2 border-b-2 border-purple-600"></div>
-                                <span className="text-purple-600 text-xs">...</span>
+                                <div className="animate-spin rounded-full h-2 w-2 border-b-2 border-[#337ab7]"></div>
+                                <span className="text-[#337ab7] text-xs">...</span>
                               </div>
                             ) : (
                               <span className="text-gray-400 text-xs">-</span>
@@ -554,7 +554,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                         onClick={() => goToPage(page)}
                         className={`px-3 py-1 text-sm border ${
                           currentPage === page
-                            ? 'bg-purple-600 text-white border-purple-600'
+                            ? 'bg-[#337ab7] text-white border-[#337ab7]'
                             : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                         }`}
                       >
@@ -601,13 +601,13 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                   value={englishText}
                   onChange={(e) => setEnglishText(e.target.value)}
                   placeholder="Enter English text to convert to audio files..."
-                  className="w-full h-32 p-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full h-32 p-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent"
                   disabled={isGenerating}
                 />
               </div>
               
-              <div className="bg-blue-50 border border-blue-200 p-3">
-                <p className="text-blue-800 text-sm">
+              <div className="bg-[#f0f4f8] border border-[#c3d4e5] p-3">
+                <p className="text-[#2e6da4] text-sm">
                   <strong>Note:</strong> This will create audio files in English, Marathi, Hindi, and Gujarati languages.
                   The files will be saved with proper naming conventions for later use in full-length announcements.
                 </p>
@@ -625,7 +625,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
               <button
                 onClick={createAudioFile}
                 disabled={isGenerating || !englishText.trim()}
-                className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-4 py-2 bg-[#337ab7] text-white hover:bg-[#2e6da4] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isGenerating ? (
                   <>

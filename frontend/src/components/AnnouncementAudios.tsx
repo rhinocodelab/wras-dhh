@@ -456,7 +456,7 @@ export default function AnnouncementAudios() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#337ab7]"></div>
         <span className="ml-2 text-gray-600">Loading announcement audios...</span>
       </div>
     );
@@ -475,7 +475,7 @@ export default function AnnouncementAudios() {
               fetchAudioFiles();
               fetchAnnouncementSegments();
             }}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-none hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2"
           >
             <RefreshCw className="h-4 w-4" />
             Refresh All
@@ -502,7 +502,7 @@ export default function AnnouncementAudios() {
             onClick={() => setActiveTab('announcement-segments')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'announcement-segments'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-[#337ab7] text-[#337ab7]'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -516,7 +516,7 @@ export default function AnnouncementAudios() {
             }}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'final-announcements'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-[#337ab7] text-[#337ab7]'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -536,7 +536,7 @@ export default function AnnouncementAudios() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={activeTab === 'audio-files' ? "Search announcement text..." : "Search segment text..."}
-            className="block w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="block w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-[#337ab7] focus:border-[#337ab7]"
           />
         </div>
       </div>
@@ -613,7 +613,7 @@ export default function AnnouncementAudios() {
                                   <>
                                     <button
                                       onClick={() => handlePlayAudio(segment.audio_path!, language)}
-                                      className="text-blue-600 hover:text-blue-900"
+                                      className="text-[#337ab7] hover:text-[#1e4a6b]"
                                       title={`Play ${language}`}
                                     >
                                       <Play className="h-4 w-4" />
@@ -669,7 +669,7 @@ export default function AnnouncementAudios() {
                     Final Announcements ({finalAnnouncements.length})
                   </h3>
                   <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <div className={`w-2 h-2 rounded-full ${isRefreshingFinal ? 'bg-blue-500 animate-spin' : 'bg-gray-400'}`}></div>
+                    <div className={`w-2 h-2 rounded-full ${isRefreshingFinal ? 'bg-[#337ab7] animate-spin' : 'bg-gray-400'}`}></div>
                     <span>
                       {isRefreshingFinal ? 'Refreshing...' : 
                         lastChecked ? `Last checked: ${lastChecked.toLocaleTimeString()}` : 'Not checked yet'
@@ -742,7 +742,7 @@ export default function AnnouncementAudios() {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handlePlayAudio(announcement.audio_path, announcement.language)}
-                              className="text-blue-600 hover:text-blue-900"
+                              className="text-[#337ab7] hover:text-[#1e4a6b]"
                               title={`Play ${announcement.language}`}
                             >
                               <Play className="h-4 w-4" />
