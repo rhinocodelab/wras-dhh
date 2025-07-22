@@ -579,14 +579,15 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
       {/* Create Audio File Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 border-2 border-gray-200 shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Create Audio File</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="text-gray-400 hover:text-gray-600"
+                title="Close create audio file modal"
               >
-                <X className="h-5 w-5" />
+                ✕
               </button>
             </div>
             
@@ -637,7 +638,7 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
       {/* Delete Confirmation Modal */}
       {showDeleteModal && fileToDelete && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Delete Audio File</h3>
               <button
@@ -646,8 +647,9 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
                   setFileToDelete(null);
                 }}
                 className="text-gray-400 hover:text-gray-600"
+                title="Close delete confirmation modal"
               >
-                <X className="h-5 w-5" />
+                ✕
               </button>
             </div>
             
@@ -696,14 +698,15 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
       {/* Full Text Modal */}
       {currentFile && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-4xl w-full p-6">
+          <div className="bg-white rounded-xl max-w-4xl w-full p-6 border-2 border-gray-200 shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Audio File #{currentFile.id} - Full Text</h3>
               <button
                 onClick={() => setCurrentFile(null)}
                 className="text-gray-400 hover:text-gray-600"
+                title="Close full text view modal"
               >
-                <X className="h-5 w-5" />
+                ✕
               </button>
             </div>
             

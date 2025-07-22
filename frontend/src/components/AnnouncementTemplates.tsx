@@ -75,10 +75,26 @@ export default function AnnouncementTemplates() {
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const [audioElements, setAudioElements] = useState<{ [key: string]: HTMLAudioElement }>({});
   const [generatingAudioForTemplate, setGeneratingAudioForTemplate] = useState<number | null>(null);
+  
+  // Audio generation progress state
+  const [audioGenerationProgress, setAudioGenerationProgress] = useState({
+    isGenerating: false,
+    currentTemplate: 0,
+    totalTemplates: 0,
+    currentTemplateName: '',
+    message: '',
+    currentLanguage: '',
+    totalLanguages: 4
+  });
 
   useEffect(() => {
     loadTemplatesForCategory(selectedCategory);
   }, [selectedCategory]);
+
+  // Monitor audio generation progress for debugging
+  useEffect(() => {
+    console.log('Audio generation progress changed:', audioGenerationProgress);
+  }, [audioGenerationProgress]);
 
   // Cleanup audio elements on unmount
   useEffect(() => {
@@ -266,40 +282,123 @@ export default function AnnouncementTemplates() {
     try {
       setIsGeneratingAudio(true);
       
-      // Create audio file using the selected text
-      const response = await fetch(API_ENDPOINTS.audioFiles.create, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          english_text: selectedText
-        }),
-      });
+      console.log('Generating audio for selected text:', selectedText);
+      console.log('Selected text translations:', selectedTextTranslations);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        
-        // Handle duplicate error specifically
-        if (response.status === 409) {
-          addToast({
-            type: 'warning',
-            title: 'Duplicate Text Found',
-            message: errorData.detail || 'This English text already exists in the database'
-          });
-          return;
-        }
-        
-        throw new Error(errorData.detail || `Failed to create audio file: ${response.statusText}`);
+      // Prepare text in all four languages
+      const textInLanguages = {
+        en: selectedText,
+        hi: selectedTextTranslations?.Hindi || selectedText,
+        mr: selectedTextTranslations?.Marathi || selectedText,
+        gu: selectedTextTranslations?.Gujarati || selectedText
+      };
+
+      interface AudioResult {
+        text: string;
+        audio_base64?: string;
+        file_name?: string;
+        success: boolean;
+        error?: string;
       }
 
-      const audioFile = await response.json();
-      setGeneratedAudioFile(audioFile);
+      interface AudioResults {
+        [key: string]: AudioResult | number | string;
+      }
+
+      const audioResults: AudioResults = {};
+      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+
+      // Generate audio for each language
+      for (const [langCode, text] of Object.entries(textInLanguages)) {
+        try {
+          console.log(`Generating audio for ${langCode}: ${text}`);
+          
+          const response = await fetch(fastApiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: text,
+              source_language: langCode
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              audioResults[langCode] = {
+                text: text,
+                audio_base64: result.audio_base64,
+                file_name: result.file_name,
+                success: true
+              };
+              console.log(`✅ Audio generated for ${langCode}`);
+            } else {
+              audioResults[langCode] = {
+                text: text,
+                success: false,
+                error: 'Failed to generate audio'
+              };
+              console.log(`❌ Audio generation failed for ${langCode}`);
+            }
+          } else {
+            const errorData = await response.json();
+            audioResults[langCode] = {
+              text: text,
+              success: false,
+              error: errorData.detail || 'API request failed'
+            };
+            console.log(`❌ API error for ${langCode}:`, errorData);
+          }
+        } catch (error: any) {
+          console.error(`Error generating audio for ${langCode}:`, error);
+          audioResults[langCode] = {
+            text: text,
+            success: false,
+            error: error.message || 'Unknown error'
+          };
+        }
+      }
+
+      // Create audio file record in the FastAPI database
+      try {
+        const audioFileResponse = await fetch(API_ENDPOINTS.audioFiles.create, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            english_text: selectedText,
+            marathi_translation: selectedTextTranslations?.Marathi || selectedText,
+            hindi_translation: selectedTextTranslations?.Hindi || selectedText,
+            gujarati_translation: selectedTextTranslations?.Gujarati || selectedText
+          }),
+        });
+
+        if (audioFileResponse.ok) {
+          const audioFileResult = await audioFileResponse.json();
+          console.log('✅ Audio file record created in FastAPI database');
+          audioResults.audio_file_id = audioFileResult.id;
+          setGeneratedAudioFile(audioFileResult);
+        } else {
+          console.error('Error creating audio file record:', await audioFileResponse.text());
+          audioResults.audio_file_error = 'Failed to create audio file record';
+        }
+      } catch (error: any) {
+        console.error('Error creating audio file record:', error);
+        audioResults.audio_file_error = error.message || 'Failed to create audio file record';
+      }
+
+      // Count successful audio generations
+      const successfulCount = Object.values(audioResults).filter(result => 
+        typeof result === 'object' && result.success
+      ).length;
 
       addToast({
         type: 'success',
-        title: 'Audio Generation Started',
-        message: 'Audio files are being generated in the background. You can monitor progress in the Audio Files section.'
+        title: 'Audio Generation Completed',
+        message: `Generated audio for selected text in ${successfulCount} languages`
       });
 
       // Close modal after successful creation
@@ -610,6 +709,209 @@ export default function AnnouncementTemplates() {
     }
   };
 
+  const generateAudioForAllTemplatesInCategory = async () => {
+    const templatesToProcess = templates.filter(t => t.dbId); // Only saved templates
+    
+    if (templatesToProcess.length === 0) {
+      addToast({
+        type: 'warning',
+        title: 'No Templates to Process',
+        message: 'No saved templates found in this category to generate audio for'
+      });
+      return;
+    }
+
+    try {
+      // Show progress modal
+      setAudioGenerationProgress({
+        isGenerating: true,
+        currentTemplate: 0,
+        totalTemplates: templatesToProcess.length,
+        currentTemplateName: '',
+        message: 'Starting audio generation for all templates in this category...',
+        currentLanguage: '',
+        totalLanguages: 4
+      });
+
+      // Force a small delay to ensure modal shows
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const results = [];
+      
+      // Process templates one by one
+      for (let i = 0; i < templatesToProcess.length; i++) {
+        const template = templatesToProcess[i];
+        
+        // Update progress for current template
+        setAudioGenerationProgress(prev => ({
+          ...prev,
+          currentTemplate: i + 1,
+          currentTemplateName: template.title,
+          message: `Processing template ${i + 1} of ${templatesToProcess.length}: ${template.title}`
+        }));
+
+        try {
+          // Call the announcement-audio API to create segments
+          const announcementResponse = await fetch('http://localhost:5001/api/announcement-audio/generate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              template_id: template.dbId
+            }),
+          });
+
+          if (announcementResponse.ok) {
+            console.log(`✅ Announcement segments started for: ${template.title}`);
+            results.push({ template: template.title, status: 'success', type: 'segments' });
+          } else if (announcementResponse.status === 409) {
+            console.log(`⚠️ Segments already exist for: ${template.title}`);
+            results.push({ template: template.title, status: 'skipped', type: 'segments' });
+          } else {
+            console.log(`❌ Failed to create segments for: ${template.title}`);
+            results.push({ template: template.title, status: 'error', type: 'segments' });
+                    }
+
+          // Generate audio files using multi-language API
+          const templateTexts = {
+            en: template.englishText,
+            hi: template.translations.Hindi || template.englishText,
+            mr: template.translations.Marathi || template.englishText,
+            gu: template.translations.Gujarati || template.englishText
+          };
+
+          const languages = ['en', 'hi', 'mr', 'gu'];
+          const languageNames = { en: 'English', hi: 'Hindi', mr: 'Marathi', gu: 'Gujarati' };
+          
+          // Process each language
+          for (let langIndex = 0; langIndex < languages.length; langIndex++) {
+            const langCode = languages[langIndex];
+            const text = templateTexts[langCode as keyof typeof templateTexts];
+            
+            // Update progress for current language
+            setAudioGenerationProgress(prev => ({
+              ...prev,
+              currentLanguage: languageNames[langCode as keyof typeof languageNames],
+              message: `Processing template ${i + 1} of ${templatesToProcess.length}: ${template.title} (${languageNames[langCode as keyof typeof languageNames]})`
+            }));
+
+            try {
+              const response = await fetch('http://localhost:5001/text-to-speech-multi-language', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  text: text,
+                  source_language: langCode
+                }),
+              });
+
+              if (response.ok) {
+                console.log(`✅ Audio generated for ${template.title} in ${languageNames[langCode as keyof typeof languageNames]}`);
+              } else {
+                console.log(`❌ Failed to generate audio for ${template.title} in ${languageNames[langCode as keyof typeof languageNames]}`);
+              }
+            } catch (error) {
+              console.error(`Error generating audio for ${template.title} in ${languageNames[langCode as keyof typeof languageNames]}:`, error);
+            }
+
+            // Small delay between languages
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
+          // Create audio file record
+          try {
+            const audioFileResponse = await fetch(API_ENDPOINTS.audioFiles.create, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                english_text: template.englishText,
+                marathi_translation: template.translations.Marathi || template.englishText,
+                hindi_translation: template.translations.Hindi || template.englishText,
+                gujarati_translation: template.translations.Gujarati || template.englishText,
+                template_id: template.dbId // Add template_id to identify announcement template audio
+              }),
+            });
+
+            if (audioFileResponse.ok) {
+              console.log(`✅ Audio file record created for: ${template.title}`);
+              results.push({ template: template.title, status: 'success', type: 'audio_file' });
+            } else {
+              console.log(`❌ Failed to create audio file record for: ${template.title}`);
+              results.push({ template: template.title, status: 'error', type: 'audio_file' });
+            }
+          } catch (error) {
+            console.error(`Error creating audio file record for ${template.title}:`, error);
+            results.push({ template: template.title, status: 'error', type: 'audio_file' });
+          }
+
+          // Small delay between templates
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+        } catch (error) {
+          console.error(`Error processing template ${template.title}:`, error);
+          results.push({ template: template.title, status: 'error', type: 'general' });
+        }
+      }
+
+      // Hide progress modal
+      setAudioGenerationProgress({
+        isGenerating: false,
+        currentTemplate: 0,
+        totalTemplates: 0,
+        currentTemplateName: '',
+        message: '',
+        currentLanguage: '',
+        totalLanguages: 4
+      });
+
+      // Show completion message
+      const successCount = results.filter(r => r.status === 'success').length;
+      const skippedCount = results.filter(r => r.status === 'skipped').length;
+      const errorCount = results.filter(r => r.status === 'error').length;
+
+      let message = '';
+      if (successCount > 0) {
+        message += `Successfully processed ${successCount} templates. `;
+      }
+      if (skippedCount > 0) {
+        message += `Skipped ${skippedCount} templates (segments already exist). `;
+      }
+      if (errorCount > 0) {
+        message += `${errorCount} templates had errors.`;
+      }
+
+      addToast({
+        type: successCount > 0 ? 'success' : 'warning',
+        title: 'Category Audio Generation Complete',
+        message: message.trim()
+      });
+
+    } catch (error: any) {
+      // Hide progress modal on error
+      setAudioGenerationProgress({
+        isGenerating: false,
+        currentTemplate: 0,
+        totalTemplates: 0,
+        currentTemplateName: '',
+        message: '',
+        currentLanguage: '',
+        totalLanguages: 4
+      });
+
+      console.error('Error generating audio for category:', error);
+      addToast({
+        type: 'error',
+        title: 'Audio Generation Failed',
+        message: error.message || 'Failed to generate audio for category'
+      });
+    }
+  };
+
   const generateAudioSegments = async (template: AnnouncementTemplate) => {
     if (!template.dbId) {
       addToast({
@@ -623,7 +925,10 @@ export default function AnnouncementTemplates() {
     try {
       setGeneratingAudioForTemplate(template.dbId);
       
-      const response = await fetch('http://localhost:5001/api/announcement-audio/generate', {
+      console.log('Generating audio segments for template:', template.title);
+
+      // Call the announcement-audio API to create segments for Announcement Segments page
+      const announcementResponse = await fetch('http://localhost:5001/api/announcement-audio/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -633,25 +938,152 @@ export default function AnnouncementTemplates() {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 409) {
+      if (!announcementResponse.ok) {
+        const errorData = await announcementResponse.json();
+        if (announcementResponse.status === 409) {
           addToast({
             type: 'warning',
-            title: 'Audio Already Exists',
-            message: 'Audio segments already exist for this template'
+            title: 'Audio Segments Already Exist',
+            message: 'Audio segments already exist for this template in the Announcement Segments section'
           });
         } else {
           throw new Error(errorData.detail || 'Failed to generate audio segments');
         }
       } else {
-        const result = await response.json();
+        const result = await announcementResponse.json();
+        console.log('✅ Announcement audio segments generation started:', result);
         addToast({
           type: 'success',
-          title: 'Audio Generation Started',
+          title: 'Audio Segments Generation Started',
           message: `Audio segments generation started for "${template.title}". You can monitor progress in the Announcement Segments section.`
         });
       }
+
+      // Also generate audio files using the multi-language API for Audio Files page
+      console.log('Generating audio files for template:', template.title);
+      console.log('Template multilingual text:', {
+        english: template.englishText,
+        hindi: template.translations.Hindi,
+        marathi: template.translations.Marathi,
+        gujarati: template.translations.Gujarati
+      });
+
+      // Prepare template text in all four languages
+      const templateTexts = {
+        en: template.englishText,
+        hi: template.translations.Hindi || template.englishText,
+        mr: template.translations.Marathi || template.englishText,
+        gu: template.translations.Gujarati || template.englishText
+      };
+
+      interface AudioResult {
+        text: string;
+        audio_base64?: string;
+        file_name?: string;
+        success: boolean;
+        error?: string;
+      }
+
+      interface AudioResults {
+        [key: string]: AudioResult | number | string;
+      }
+
+      const audioResults: AudioResults = {};
+      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+
+      // Generate audio for each language
+      for (const [langCode, text] of Object.entries(templateTexts)) {
+        try {
+          console.log(`Generating audio for ${langCode}: ${text}`);
+          
+          const response = await fetch(fastApiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: text,
+              source_language: langCode
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              audioResults[langCode] = {
+                text: text,
+                audio_base64: result.audio_base64,
+                file_name: result.file_name,
+                success: true
+              };
+              console.log(`✅ Audio generated for ${langCode}`);
+            } else {
+              audioResults[langCode] = {
+                text: text,
+                success: false,
+                error: 'Failed to generate audio'
+              };
+              console.log(`❌ Audio generation failed for ${langCode}`);
+            }
+          } else {
+            const errorData = await response.json();
+            audioResults[langCode] = {
+              text: text,
+              success: false,
+              error: errorData.detail || 'API request failed'
+            };
+            console.log(`❌ API error for ${langCode}:`, errorData);
+          }
+        } catch (error: any) {
+          console.error(`Error generating audio for ${langCode}:`, error);
+          audioResults[langCode] = {
+            text: text,
+            success: false,
+            error: error.message || 'Unknown error'
+          };
+        }
+      }
+
+      // Create audio file record in the FastAPI database with template_id to identify it
+      try {
+        const audioFileResponse = await fetch(API_ENDPOINTS.audioFiles.create, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            english_text: template.englishText,
+            marathi_translation: template.translations.Marathi || template.englishText,
+            hindi_translation: template.translations.Hindi || template.englishText,
+            gujarati_translation: template.translations.Gujarati || template.englishText,
+            template_id: template.dbId // Add template_id to identify announcement template audio
+          }),
+        });
+
+        if (audioFileResponse.ok) {
+          const audioFileResult = await audioFileResponse.json();
+          console.log('✅ Audio file record created in FastAPI database');
+          audioResults.audio_file_id = audioFileResult.id;
+        } else {
+          console.error('Error creating audio file record:', await audioFileResponse.text());
+          audioResults.audio_file_error = 'Failed to create audio file record';
+        }
+      } catch (error: any) {
+        console.error('Error creating audio file record:', error);
+        audioResults.audio_file_error = error.message || 'Failed to create audio file record';
+      }
+
+      // Count successful audio generations
+      const successfulCount = Object.values(audioResults).filter(result => 
+        typeof result === 'object' && result.success
+      ).length;
+
+      addToast({
+        type: 'success',
+        title: 'Audio Generation Completed',
+        message: `Generated audio for template "${template.title}" in ${successfulCount} languages. Audio segments also created for Announcement Segments section.`
+      });
+
     } catch (error: any) {
       console.error('Error generating audio segments:', error);
       addToast({
@@ -751,6 +1183,7 @@ export default function AnnouncementTemplates() {
                           disabled={generatingAudioForTemplate === template.dbId}
                           className="px-2 py-1 bg-purple-600 text-white rounded-none hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors"
                           title="Generate audio files for this template in all supported languages (English, Marathi, Hindi, Gujarati)"
+                          style={{ display: 'none' }}
                         >
                           {generatingAudioForTemplate === template.dbId ? 'Generating...' : 'Generate Audio'}
                         </button>
@@ -762,6 +1195,18 @@ export default function AnnouncementTemplates() {
                           Delete
                         </button>
                       </>
+                    )}
+                    
+                    {/* Generate Audio for All Templates in Category */}
+                    {template.isSaved && template.dbId && (
+                      <button
+                        onClick={generateAudioForAllTemplatesInCategory}
+                        disabled={audioGenerationProgress.isGenerating || templates.filter(t => t.dbId).length === 0}
+                        className="px-2 py-1 bg-purple-600 text-white rounded-none hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors"
+                        title="Generate audio for all saved templates in this category"
+                      >
+                        {audioGenerationProgress.isGenerating ? 'Generating...' : 'Generate Audio for All'}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -850,10 +1295,52 @@ export default function AnnouncementTemplates() {
         </div>
       </div>
 
+      {/* Audio Generation Progress Modal */}
+      {audioGenerationProgress.isGenerating && (
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#337ab7] mx-auto mb-4"></div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Generating Audio for Category</h3>
+              <p className="text-sm text-gray-600 mb-4">{audioGenerationProgress.message}</p>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-[#337ab7] h-2 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${audioGenerationProgress.totalTemplates > 0 ? (audioGenerationProgress.currentTemplate / audioGenerationProgress.totalTemplates) * 100 : 0}%` 
+                  }}
+                ></div>
+              </div>
+              
+              {/* Progress Text */}
+              <div className="text-sm text-gray-700">
+                <p>Progress: {audioGenerationProgress.currentTemplate} of {audioGenerationProgress.totalTemplates} templates</p>
+                {audioGenerationProgress.currentTemplateName && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Current: {audioGenerationProgress.currentTemplateName}
+                  </p>
+                )}
+                {audioGenerationProgress.currentLanguage && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Language: {audioGenerationProgress.currentLanguage}
+                  </p>
+                )}
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-4 mb-4">
+                Please wait while audio is being generated for all templates in this category...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Audio Generation Modal */}
       {showAudioModal && selectedTemplate && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto border-2 border-gray-200 shadow-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">Generate Audio from Selected Text</h3>
               <button
@@ -1071,7 +1558,7 @@ export default function AnnouncementTemplates() {
       {/* Save Confirmation Modal */}
       {showSaveModal && editingTemplate && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Save Template</h3>
             <div className="space-y-4">
               <div>
@@ -1125,7 +1612,7 @@ export default function AnnouncementTemplates() {
       {/* Edit Template Modal */}
       {showEditModal && editingTemplate && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 border-2 border-gray-200 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Template</h3>
             <div className="space-y-4">
               <div>

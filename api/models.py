@@ -56,6 +56,7 @@ class AudioFile(Base):
     marathi_translation = Column(Text, nullable=True)
     hindi_translation = Column(Text, nullable=True)
     gujarati_translation = Column(Text, nullable=True)
+    template_id = Column(Integer, ForeignKey("announcement_templates.id"), nullable=True)  # To identify announcement template audio
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

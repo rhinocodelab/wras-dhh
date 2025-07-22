@@ -12,8 +12,17 @@ interface TrainRoute {
   id: number;
   train_number: string;
   train_name: string;
+  train_name_hi?: string;
+  train_name_mr?: string;
+  train_name_gu?: string;
   start_station_name: string;
+  start_station_name_hi?: string;
+  start_station_name_mr?: string;
+  start_station_name_gu?: string;
   end_station_name: string;
+  end_station_name_hi?: string;
+  end_station_name_mr?: string;
+  end_station_name_gu?: string;
   start_station_code: string;
   end_station_code: string;
   platform_number?: number;
@@ -314,15 +323,43 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         const template = templates[0]; // Get the first template for this category
         
         // Replace placeholders with actual data from search results
-        const replacePlaceholders = (text: string) => {
+        const replacePlaceholders = (text: string, language: string) => {
           // Add spaces between each digit of train number for individual pronunciation
           const spacedTrainNumber = searchResultRoute.train_number.split('').join(' ');
           
+          // Get language-specific names with fallbacks to English
+          const getTrainName = () => {
+            switch (language) {
+              case 'hindi': return searchResultRoute.train_name_hi || searchResultRoute.train_name;
+              case 'marathi': return searchResultRoute.train_name_mr || searchResultRoute.train_name;
+              case 'gujarati': return searchResultRoute.train_name_gu || searchResultRoute.train_name;
+              default: return searchResultRoute.train_name;
+            }
+          };
+          
+          const getStartStationName = () => {
+            switch (language) {
+              case 'hindi': return searchResultRoute.start_station_name_hi || searchResultRoute.start_station_name;
+              case 'marathi': return searchResultRoute.start_station_name_mr || searchResultRoute.start_station_name;
+              case 'gujarati': return searchResultRoute.start_station_name_gu || searchResultRoute.start_station_name;
+              default: return searchResultRoute.start_station_name;
+            }
+          };
+          
+          const getEndStationName = () => {
+            switch (language) {
+              case 'hindi': return searchResultRoute.end_station_name_hi || searchResultRoute.end_station_name;
+              case 'marathi': return searchResultRoute.end_station_name_mr || searchResultRoute.end_station_name;
+              case 'gujarati': return searchResultRoute.end_station_name_gu || searchResultRoute.end_station_name;
+              default: return searchResultRoute.end_station_name;
+            }
+          };
+          
           return text
             .replace(/\{train_number\}/g, spacedTrainNumber)
-            .replace(/\{train_name\}/g, searchResultRoute.train_name)
-            .replace(/\{start_station_name\}/g, searchResultRoute.start_station_name)
-            .replace(/\{end_station_name\}/g, searchResultRoute.end_station_name)
+            .replace(/\{train_name\}/g, getTrainName())
+            .replace(/\{start_station_name\}/g, getStartStationName())
+            .replace(/\{end_station_name\}/g, getEndStationName())
             .replace(/\{platform_number\}/g, platform.toString())
             .replace(/\{start_station_code\}/g, searchResultRoute.start_station_code)
             .replace(/\{end_station_code\}/g, searchResultRoute.end_station_code);
@@ -330,10 +367,10 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         
         // Generate announcement texts for all languages
         const texts = {
-          english: replacePlaceholders(template.english_text || ''),
-          hindi: replacePlaceholders(template.hindi_text || ''),
-          marathi: replacePlaceholders(template.marathi_text || ''),
-          gujarati: replacePlaceholders(template.gujarati_text || '')
+          english: replacePlaceholders(template.english_text || '', 'english'),
+          hindi: replacePlaceholders(template.hindi_text || '', 'hindi'),
+          marathi: replacePlaceholders(template.marathi_text || '', 'marathi'),
+          gujarati: replacePlaceholders(template.gujarati_text || '', 'gujarati')
         };
         
         setAnnouncementTexts(texts);

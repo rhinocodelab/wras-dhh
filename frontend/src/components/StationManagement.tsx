@@ -44,6 +44,18 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
     totalSteps: 3 
   });
   
+  // Translation progress state
+  const [translationProgress, setTranslationProgress] = useState({
+    isTranslating: false,
+    currentStation: 0,
+    totalStations: 0,
+    currentStationName: '',
+    message: ''
+  });
+  
+  // Cancel translation flag
+  const [cancelTranslation, setCancelTranslation] = useState(false);
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(7);
@@ -65,6 +77,11 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       checkStationsWithAudio(stations.map(s => s.station_name));
     }
   }, [stations]);
+
+  // Monitor translation progress
+  useEffect(() => {
+    console.log('Translation progress changed:', translationProgress);
+  }, [translationProgress]);
 
 
 
@@ -289,42 +306,130 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
     try {
       setGeneratingAudio(prev => new Set(prev).add(station.id));
       
-      // Create audio file using the station name
-      const response = await fetch(API_ENDPOINTS.audioFiles.create, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          english_text: station.station_name
-        }),
+      console.log('Generating audio for station:', station.station_name);
+      console.log('Station multilingual names:', {
+        english: station.station_name,
+        hindi: station.station_name_hi,
+        marathi: station.station_name_mr,
+        gujarati: station.station_name_gu
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        
-        // Handle duplicate error specifically
-        if (response.status === 409) {
-          addToast({
-            type: 'warning',
-            title: 'Audio Already Exists',
-            message: `Audio for station "${station.station_name}" already exists in the database`
-          });
-          return;
-        }
-        
-        throw new Error(errorData.detail || 'Failed to generate audio');
+      // Prepare station names in all four languages
+      const stationNames = {
+        en: station.station_name,
+        hi: station.station_name_hi || station.station_name,
+        mr: station.station_name_mr || station.station_name,
+        gu: station.station_name_gu || station.station_name
+      };
+
+      interface AudioResult {
+        text: string;
+        audio_base64?: string;
+        file_name?: string;
+        success: boolean;
+        error?: string;
       }
 
-      const result = await response.json();
-      
+      interface AudioResults {
+        [key: string]: AudioResult | number | string;
+      }
+
+      const audioResults: AudioResults = {};
+      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+
+      // Generate audio for each language
+      for (const [langCode, stationName] of Object.entries(stationNames)) {
+        try {
+          console.log(`Generating audio for ${langCode}: ${stationName}`);
+          
+          const response = await fetch(fastApiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: stationName,
+              source_language: langCode
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              audioResults[langCode] = {
+                text: stationName,
+                audio_base64: result.audio_base64,
+                file_name: result.file_name,
+                success: true
+              };
+              console.log(`✅ Audio generated for ${langCode}`);
+            } else {
+              audioResults[langCode] = {
+                text: stationName,
+                success: false,
+                error: 'Failed to generate audio'
+              };
+              console.log(`❌ Audio generation failed for ${langCode}`);
+            }
+          } else {
+            const errorData = await response.json();
+            audioResults[langCode] = {
+              text: stationName,
+              success: false,
+              error: errorData.detail || 'API request failed'
+            };
+            console.log(`❌ API error for ${langCode}:`, errorData);
+          }
+        } catch (error: any) {
+          console.error(`Error generating audio for ${langCode}:`, error);
+          audioResults[langCode] = {
+            text: stationName,
+            success: false,
+            error: error.message || 'Unknown error'
+          };
+        }
+      }
+
+      // Create audio file record in the FastAPI database
+      try {
+        const audioFileResponse = await fetch(API_ENDPOINTS.audioFiles.create, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            english_text: station.station_name,
+            marathi_translation: station.station_name_mr || station.station_name,
+            hindi_translation: station.station_name_hi || station.station_name,
+            gujarati_translation: station.station_name_gu || station.station_name
+          }),
+        });
+
+        if (audioFileResponse.ok) {
+          const audioFileResult = await audioFileResponse.json();
+          console.log('✅ Audio file record created in FastAPI database');
+          audioResults.audio_file_id = audioFileResult.id;
+        } else {
+          console.error('Error creating audio file record:', await audioFileResponse.text());
+          audioResults.audio_file_error = 'Failed to create audio file record';
+        }
+             } catch (error: any) {
+         console.error('Error creating audio file record:', error);
+         audioResults.audio_file_error = error.message || 'Failed to create audio file record';
+       }
+
       // Add station to the set of stations with audio
       setStationsWithAudio(prev => new Set(prev).add(station.id));
       
+      // Count successful audio generations
+      const successfulCount = Object.values(audioResults).filter(result => 
+        typeof result === 'object' && result.success
+      ).length;
+
       addToast({
         type: 'success',
-        title: 'Audio Generation Started',
-        message: `Audio generation started for station "${station.station_name}" in all languages`
+        title: 'Audio Generation Completed',
+        message: `Generated audio for station "${station.station_name}" in ${successfulCount} languages`
       });
       
     } catch (error: any) {
@@ -746,7 +851,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       addToast({
         type: 'success',
         title: 'Queue Created',
-        message: `${stationsToProcess.length} stations added to audio generation queue`
+        message: `${stationsToProcess.length} stations added to audio generation queue. Each station will generate audio in English, Hindi, Marathi, and Gujarati.`
       });
 
       // Clear setup progress and start processing the queue
@@ -799,7 +904,6 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
   const validateImportData = (data: any[]) => {
     const errors: string[] = [];
     const requiredColumns = ['Station Name', 'Station Code'];
-    const optionalColumns = ['Station Name (Hindi)', 'Station Name (Marathi)', 'Station Name (Gujarati)'];
     
     if (data.length === 0) {
       errors.push('Excel file is empty');
@@ -842,6 +946,8 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
   };
 
   const handleImport = async () => {
+    console.log('handleImport called with', importData.length, 'stations');
+    
     if (importErrors.length > 0) {
       setError('Please fix all validation errors before importing');
       return;
@@ -849,28 +955,100 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
 
     try {
       setError(null);
-      const importPromises = importData.map(async (row) => {
-        return apiService.createStation({
-          station_name: row['Station Name'].toString(),
-          station_code: row['Station Code'].toString().toUpperCase(),
-          station_name_hi: row['Station Name (Hindi)']?.toString() || row['Station Name'].toString(),
-          station_name_mr: row['Station Name (Marathi)']?.toString() || row['Station Name'].toString(),
-          station_name_gu: row['Station Name (Gujarati)']?.toString() || row['Station Name'].toString()
-        });
+      
+      // Show translation progress modal
+      console.log('Starting import process with', importData.length, 'stations');
+      const progressState = {
+        isTranslating: true,
+        currentStation: 0,
+        totalStations: importData.length,
+        currentStationName: '',
+        message: 'Starting import and translation process...'
+      };
+      console.log('Setting progress state:', progressState);
+      setTranslationProgress(progressState);
+      
+      // Force a small delay to ensure modal shows
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Process stations one by one to show progress
+      const results = [];
+      setCancelTranslation(false);
+      
+      for (let i = 0; i < importData.length; i++) {
+        // Check if user cancelled
+        if (cancelTranslation) {
+          break;
+        }
+        
+        const row = importData[i];
+        const stationName = row['Station Name'].toString();
+        
+        // Update progress
+        setTranslationProgress(prev => ({
+          ...prev,
+          currentStation: i + 1,
+          currentStationName: stationName,
+          message: `Processing station ${i + 1} of ${importData.length}: ${stationName} (translating to multiple languages)`
+        }));
+
+        try {
+          const result = await apiService.createStation({
+            station_name: stationName,
+            station_code: row['Station Code'].toString().toUpperCase(),
+            // Let the backend handle translation if multilingual names are not provided
+            station_name_hi: row['Station Name (Hindi)']?.toString() || '',
+            station_name_mr: row['Station Name (Marathi)']?.toString() || '',
+            station_name_gu: row['Station Name (Gujarati)']?.toString() || ''
+          });
+          results.push(result);
+          
+          // Small delay to make progress visible and give API time
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          console.error(`Error importing station ${stationName}:`, error);
+          // Continue with other stations even if one fails
+        }
+      }
+
+      // Hide progress modal
+      setTranslationProgress({
+        isTranslating: false,
+        currentStation: 0,
+        totalStations: 0,
+        currentStationName: '',
+        message: ''
       });
 
-      await Promise.all(importPromises);
       await fetchStations();
       setShowImportModal(false);
       setImportData([]);
       setImportErrors([]);
       onDataChange?.();
-      addToast({
-        type: 'success',
-        title: 'Import Successful',
-        message: `${importData.length} stations have been imported successfully`
-      });
+      
+      if (cancelTranslation) {
+        addToast({
+          type: 'info',
+          title: 'Import Cancelled',
+          message: `${results.length} stations were imported before cancellation`
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: 'Import Successful',
+          message: `${results.length} stations have been imported and translated to multiple languages`
+        });
+      }
     } catch (error: any) {
+      // Hide progress modal on error
+      setTranslationProgress({
+        isTranslating: false,
+        currentStation: 0,
+        totalStations: 0,
+        currentStationName: '',
+        message: ''
+      });
+      
       setError(error.message);
       addToast({
         type: 'error',
@@ -1210,7 +1388,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingStation ? 'Edit Station' : 'Add New Station'}
             </h3>
@@ -1308,10 +1486,54 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
         </div>
       )}
 
+      {/* Translation Progress Modal */}
+      {translationProgress.isTranslating && (
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#337ab7] mx-auto mb-4"></div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Importing and Translating Stations</h3>
+              <p className="text-sm text-gray-600 mb-4">{translationProgress.message}</p>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-[#337ab7] h-2 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${translationProgress.totalStations > 0 ? (translationProgress.currentStation / translationProgress.totalStations) * 100 : 0}%` 
+                  }}
+                ></div>
+              </div>
+              
+              {/* Progress Text */}
+              <div className="text-sm text-gray-700">
+                <p>Progress: {translationProgress.currentStation} of {translationProgress.totalStations} stations</p>
+                {translationProgress.currentStationName && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Current: {translationProgress.currentStationName}
+                  </p>
+                )}
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-4 mb-4">
+                Please wait while stations are being imported and translated to multiple languages...
+              </p>
+              
+              <button
+                onClick={() => setCancelTranslation(true)}
+                className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-none hover:bg-red-50"
+              >
+                Cancel Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto border-2 border-gray-200 shadow-lg">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">Import Stations from Excel</h3>
               <button
@@ -1321,8 +1543,9 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                   setImportErrors([]);
                 }}
                 className="text-gray-400 hover:text-gray-600 p-1"
+                title="Close import modal"
               >
-                <X className="h-4 w-4" />
+                ✕
               </button>
             </div>
 
@@ -1344,13 +1567,14 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                   <label
                     htmlFor="station-excel-upload"
                     className="cursor-pointer bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none inline-flex items-center space-x-1 text-sm"
+                    title="Select an Excel file to import stations"
                   >
-                    <Upload className="h-3 w-3" />
-                    <span>Choose Excel File</span>
+                    Choose Excel File
                   </label>
                   <p className="text-sm text-gray-500 mt-2">
-                    Upload an Excel file with required columns: Station Name, Station Code<br/>
-                    Optional columns: Station Name (Hindi), Station Name (Marathi), Station Name (Gujarati)
+                    Upload an Excel file with station information<br/>
+                    <strong>Required:</strong> Station Name, Station Code<br/>
+                    <em>Note: English station names will be automatically translated to Hindi, Marathi, and Gujarati</em>
                   </p>
                 </div>
               </div>
@@ -1361,11 +1585,21 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                 <div className="text-sm text-[#2e6da4]">
                   <p className="mb-2">Your Excel file must have these exact column headers:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li><strong>Station Name</strong> - Full name of the railway station</li>
+                    <li><strong>Station Name</strong> - Full name of the railway station (English)</li>
                     <li><strong>Station Code</strong> - Unique code for the station</li>
                   </ul>
                   <p className="mt-2 text-xs">
-                    Note: Station codes must be unique and will be automatically converted to uppercase
+                    Note: Station codes must be unique and will be automatically converted to uppercase.<br/>
+                    English station names will be automatically translated to Hindi, Marathi, and Gujarati.
+                  </p>
+                  <p className="mt-2 text-xs">
+                    <strong>Download sample file:</strong> <a 
+                      href="/sample_docs/sample_stations.xlsx" 
+                      download 
+                      className="text-[#337ab7] hover:underline"
+                    >
+                      sample_stations.xlsx
+                    </a>
                   </p>
                 </div>
               </div>

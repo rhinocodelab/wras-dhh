@@ -184,6 +184,7 @@ from typing import List
 
 class AudioFileRequest(BaseModel):
     english_text: str
+    template_id: int = None  # Optional template_id to identify announcement template audio
 
 class AudioFileBulkDeleteRequest(BaseModel):
     english_texts: List[str]
@@ -218,7 +219,8 @@ async def create_audio_file(
     # Create audio file record
     audio_file = AudioFile(
         english_text=request.english_text.strip(),
-        english_translation=request.english_text.strip()  # English translation is same as original
+        english_translation=request.english_text.strip(),  # English translation is same as original
+        template_id=request.template_id  # Set template_id if provided
     )
     
     db.add(audio_file)
@@ -254,9 +256,10 @@ async def check_duplicate_audio_file(
 
 @router.get("/")
 async def list_audio_files(db: Session = Depends(get_db)):
-    """Get all audio files"""
+    """Get all audio files, excluding those generated from announcement templates"""
     audio_files = db.query(AudioFile).filter(
-        AudioFile.is_active == True
+        AudioFile.is_active == True,
+        AudioFile.template_id.is_(None)  # Exclude audio files generated from announcement templates
     ).order_by(AudioFile.created_at.desc()).all()
     
     return audio_files

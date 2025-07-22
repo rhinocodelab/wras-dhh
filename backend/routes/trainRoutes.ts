@@ -1,6 +1,40 @@
 import express from 'express';
 import { dbRun, dbGet, dbAll } from '../database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import axios from 'axios';
+
+// Function to translate text using the FastAPI translation service
+async function translateTrainName(englishName: string): Promise<{ hi: string; mr: string; gu: string }> {
+  try {
+    const response = await axios.post('http://localhost:5001/translate', {
+      text: englishName,
+      source_language: 'en'
+    });
+
+    if (response.data.success) {
+      return {
+        hi: response.data.translations.Hindi || englishName,
+        mr: response.data.translations.Marathi || englishName,
+        gu: response.data.translations.Gujarati || englishName
+      };
+    } else {
+      console.error('Translation failed:', response.data);
+      return {
+        hi: englishName,
+        mr: englishName,
+        gu: englishName
+      };
+    }
+  } catch (error) {
+    console.error('Error translating train name:', error);
+    // Return English name as fallback for all languages
+    return {
+      hi: englishName,
+      mr: englishName,
+      gu: englishName
+    };
+  }
+}
 
 const router = express.Router();
 
@@ -36,8 +70,14 @@ router.get('/', authenticateToken, async (req, res) => {
       SELECT 
         tr.*,
         s1.station_name as start_station_name,
+        s1.station_name_hi as start_station_name_hi,
+        s1.station_name_mr as start_station_name_mr,
+        s1.station_name_gu as start_station_name_gu,
         s1.station_code as start_station_code,
         s2.station_name as end_station_name,
+        s2.station_name_hi as end_station_name_hi,
+        s2.station_name_mr as end_station_name_mr,
+        s2.station_name_gu as end_station_name_gu,
         s2.station_code as end_station_code
       FROM train_routes tr
       JOIN stations s1 ON tr.start_station_id = s1.id
@@ -76,8 +116,14 @@ router.get('/all', authenticateToken, async (req, res) => {
       SELECT 
         tr.*,
         s1.station_name as start_station_name,
+        s1.station_name_hi as start_station_name_hi,
+        s1.station_name_mr as start_station_name_mr,
+        s1.station_name_gu as start_station_name_gu,
         s1.station_code as start_station_code,
         s2.station_name as end_station_name,
+        s2.station_name_hi as end_station_name_hi,
+        s2.station_name_mr as end_station_name_mr,
+        s2.station_name_gu as end_station_name_gu,
         s2.station_code as end_station_code
       FROM train_routes tr
       JOIN stations s1 ON tr.start_station_id = s1.id
@@ -121,9 +167,29 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid station ID' });
     }
 
+    // If multilingual names are not provided, translate the English name
+    let finalHindiName = train_name_hi;
+    let finalMarathiName = train_name_mr;
+    let finalGujaratiName = train_name_gu;
+
+    if (!train_name_hi || !train_name_mr || !train_name_gu) {
+      console.log(`Translating train name: ${train_name}`);
+      const translations = await translateTrainName(train_name);
+      
+      finalHindiName = train_name_hi || translations.hi;
+      finalMarathiName = train_name_mr || translations.mr;
+      finalGujaratiName = train_name_gu || translations.gu;
+      
+      console.log(`Translation results for ${train_name}:`, {
+        hindi: finalHindiName,
+        marathi: finalMarathiName,
+        gujarati: finalGujaratiName
+      });
+    }
+
     const result = await dbRun(
       'INSERT INTO train_routes (train_number, train_name, train_name_hi, train_name_mr, train_name_gu, start_station_id, end_station_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [train_number, train_name, train_name_hi || train_name, train_name_mr || train_name, train_name_gu || train_name, start_station_id, end_station_id]
+      [train_number, train_name, finalHindiName, finalMarathiName, finalGujaratiName, start_station_id, end_station_id]
     );
 
     const newRoute = await dbGet(`
@@ -174,9 +240,29 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid station ID' });
     }
 
+    // If multilingual names are not provided, translate the English name
+    let finalHindiName = train_name_hi;
+    let finalMarathiName = train_name_mr;
+    let finalGujaratiName = train_name_gu;
+
+    if (!train_name_hi || !train_name_mr || !train_name_gu) {
+      console.log(`Translating train name for update: ${train_name}`);
+      const translations = await translateTrainName(train_name);
+      
+      finalHindiName = train_name_hi || translations.hi;
+      finalMarathiName = train_name_mr || translations.mr;
+      finalGujaratiName = train_name_gu || translations.gu;
+      
+      console.log(`Translation results for ${train_name}:`, {
+        hindi: finalHindiName,
+        marathi: finalMarathiName,
+        gujarati: finalGujaratiName
+      });
+    }
+
     await dbRun(
       'UPDATE train_routes SET train_number = ?, train_name = ?, train_name_hi = ?, train_name_mr = ?, train_name_gu = ?, start_station_id = ?, end_station_id = ? WHERE id = ?',
-      [train_number, train_name, train_name_hi || train_name, train_name_mr || train_name, train_name_gu || train_name, start_station_id, end_station_id, id]
+      [train_number, train_name, finalHindiName, finalMarathiName, finalGujaratiName, start_station_id, end_station_id, id]
     );
 
     const updatedRoute = await dbGet(`

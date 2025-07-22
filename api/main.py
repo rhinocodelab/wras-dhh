@@ -66,6 +66,10 @@ class TTSResponse(BaseModel):
     success: bool
     message: str = "Text-to-speech completed successfully"
 
+class MultiLanguageTTSRequest(BaseModel):
+    text: str
+    source_language: str  # "en", "hi", "mr", "gu"
+
 @app.get("/")
 async def root():
     return {"message": "WRAS-DHH Translation API is running"}
@@ -243,6 +247,85 @@ async def convert_text_to_speech_all_languages(request: TTSRequest):
         
     except Exception as e:
         print(f"Text-to-speech error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Text-to-speech failed: {str(e)}")
+
+@app.post("/text-to-speech-multi-language")
+async def convert_text_to_speech_multi_language(request: MultiLanguageTTSRequest):
+    """
+    Convert text to speech in the source language only.
+    Accepts text in English, Hindi, Marathi, or Gujarati and generates audio in that language.
+    """
+    try:
+        if not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+        # Validate source language
+        supported_languages = {
+            "en": "English",
+            "hi": "Hindi",
+            "mr": "Marathi",
+            "gu": "Gujarati"
+        }
+
+        if request.source_language not in supported_languages:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported source language. Supported languages: {list(supported_languages.keys())}"
+            )
+
+        # Map source language to voice name
+        voice_mapping = {
+            "en": "en-IN-Chirp3-HD-Achernar",
+            "hi": "hi-IN-Chirp3-HD-Achernar",
+            "mr": "mr-IN-Chirp3-HD-Achernar",
+            "gu": "gu-IN-Chirp3-HD-Achernar"
+        }
+
+        voice_name = voice_mapping[request.source_language]
+        language_name = supported_languages[request.source_language]
+
+        # Configure the text-to-speech request
+        synthesis_input = texttospeech.SynthesisInput(text=request.text)
+
+        # Configure the voice
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=voice_name.split('-')[0] + '-' + voice_name.split('-')[1],
+            name=voice_name,
+            ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+        )
+
+        # Configure the audio output
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=0.9,
+            pitch=0.0,
+            volume_gain_db=0.0
+        )
+
+        # Perform the text-to-speech request
+        response = tts_client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+
+        # Convert audio content to base64 for JSON response
+        import base64
+        audio_base64 = base64.b64encode(response.audio_content).decode('utf-8')
+
+        return {
+            "original_text": request.text,
+            "source_language": request.source_language,
+            "language_name": language_name,
+            "voice_name": voice_name,
+            "audio_base64": audio_base64,
+            "file_name": f"speech_{request.source_language}.mp3",
+            "success": True,
+            "message": f"Text-to-speech completed for {language_name}"
+        }
+
+    except Exception as e:
+        print(f"Multi-language text-to-speech error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Text-to-speech failed: {str(e)}")
 
 # Include template routes

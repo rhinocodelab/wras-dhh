@@ -47,6 +47,15 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
     totalSteps: 3 
   });
   
+  // Translation progress state
+  const [translationProgress, setTranslationProgress] = useState({
+    isTranslating: false,
+    currentRoute: 0,
+    totalRoutes: 0,
+    currentRouteName: '',
+    message: ''
+  });
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(7);
@@ -60,6 +69,11 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
   useEffect(() => {
     fetchData();
   }, [currentPage, pageSize, searchQuery]);
+
+  // Monitor translation progress for debugging
+  useEffect(() => {
+    console.log('Translation progress changed:', translationProgress);
+  }, [translationProgress]);
 
 
 
@@ -341,41 +355,134 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
     try {
       setGeneratingAudio(prev => new Set(prev).add(route.id));
       
-      // Create audio file using the train name
-      const response = await fetch(API_ENDPOINTS.audioFiles.create, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          english_text: route.train_name
-        }),
+      console.log('Generating audio for train route:', route.train_name);
+      console.log('Train multilingual names:', {
+        english: route.train_name,
+        hindi: route.train_name_hi,
+        marathi: route.train_name_mr,
+        gujarati: route.train_name_gu
       });
 
-      if (response.ok) {
-        addToast({
-          type: 'success',
-          title: 'Audio Generation Started',
-          message: `Audio generation started for train "${route.train_name}"`
-        });
-        
-        // Update the routes with audio state
-        setRoutesWithAudio(prev => new Set(prev).add(route.id));
-      } else {
-        const errorData = await response.json();
-        if (response.status === 409) {
-          addToast({
-            type: 'warning',
-            title: 'Audio Already Exists',
-            message: `Audio for train "${route.train_name}" already exists`
+      // Prepare train names in all four languages
+      const trainNames = {
+        en: route.train_name,
+        hi: route.train_name_hi || route.train_name,
+        mr: route.train_name_mr || route.train_name,
+        gu: route.train_name_gu || route.train_name
+      };
+
+      interface AudioResult {
+        text: string;
+        audio_base64?: string;
+        file_name?: string;
+        success: boolean;
+        error?: string;
+      }
+
+      interface AudioResults {
+        [key: string]: AudioResult | number | string;
+      }
+
+      const audioResults: AudioResults = {};
+      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+
+      // Generate audio for each language
+      for (const [langCode, trainName] of Object.entries(trainNames)) {
+        try {
+          console.log(`Generating audio for ${langCode}: ${trainName}`);
+          
+          const response = await fetch(fastApiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: trainName,
+              source_language: langCode
+            }),
           });
-          setRoutesWithAudio(prev => new Set(prev).add(route.id));
-        } else {
-          throw new Error(errorData.error || 'Failed to generate audio');
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              audioResults[langCode] = {
+                text: trainName,
+                audio_base64: result.audio_base64,
+                file_name: result.file_name,
+                success: true
+              };
+              console.log(`✅ Audio generated for ${langCode}`);
+            } else {
+              audioResults[langCode] = {
+                text: trainName,
+                success: false,
+                error: 'Failed to generate audio'
+              };
+              console.log(`❌ Audio generation failed for ${langCode}`);
+            }
+          } else {
+            const errorData = await response.json();
+            audioResults[langCode] = {
+              text: trainName,
+              success: false,
+              error: errorData.detail || 'API request failed'
+            };
+            console.log(`❌ API error for ${langCode}:`, errorData);
+          }
+        } catch (error: any) {
+          console.error(`Error generating audio for ${langCode}:`, error);
+          audioResults[langCode] = {
+            text: trainName,
+            success: false,
+            error: error.message || 'Unknown error'
+          };
         }
       }
+
+      // Create audio file record in the FastAPI database
+      try {
+        const audioFileResponse = await fetch(API_ENDPOINTS.audioFiles.create, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            english_text: route.train_name,
+            marathi_translation: route.train_name_mr || route.train_name,
+            hindi_translation: route.train_name_hi || route.train_name,
+            gujarati_translation: route.train_name_gu || route.train_name
+          }),
+        });
+
+        if (audioFileResponse.ok) {
+          const audioFileResult = await audioFileResponse.json();
+          console.log('✅ Audio file record created in FastAPI database');
+          audioResults.audio_file_id = audioFileResult.id;
+        } else {
+          console.error('Error creating audio file record:', await audioFileResponse.text());
+          audioResults.audio_file_error = 'Failed to create audio file record';
+        }
+      } catch (error: any) {
+        console.error('Error creating audio file record:', error);
+        audioResults.audio_file_error = error.message || 'Failed to create audio file record';
+      }
+
+      // Add route to the set of routes with audio
+      setRoutesWithAudio(prev => new Set(prev).add(route.id));
+      
+      // Count successful audio generations
+      const successfulCount = Object.values(audioResults).filter(result => 
+        typeof result === 'object' && result.success
+      ).length;
+
+      addToast({
+        type: 'success',
+        title: 'Audio Generation Completed',
+        message: `Generated audio for train "${route.train_name}" in ${successfulCount} languages`
+      });
+      
     } catch (error: any) {
-      console.error('Error generating audio:', error);
+      console.error('Audio generation error:', error);
       addToast({
         type: 'error',
         title: 'Audio Generation Failed',
@@ -764,7 +871,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
       addToast({
         type: 'success',
         title: 'Queue Created',
-        message: `${routesToProcess.length} train routes from all pages added to audio generation queue`
+        message: `${routesToProcess.length} train routes from all pages added to audio generation queue. Each train will generate audio in English, Hindi, Marathi, and Gujarati.`
       });
 
       // Clear setup progress and start processing the queue
@@ -833,7 +940,6 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
   const validateImportData = (data: any[]) => {
     const errors: string[] = [];
     const requiredColumns = ['Train Number', 'Train Name', 'Start Station', 'Start Station Code', 'End Station', 'End Station Code'];
-    const optionalColumns = ['Train Name (Hindi)', 'Train Name (Marathi)', 'Train Name (Gujarati)'];
     
     if (data.length === 0) {
       errors.push('Excel file is empty');
@@ -889,6 +995,8 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
   };
 
   const handleImport = async () => {
+    console.log('handleImport called with', importData.length, 'train routes');
+    
     if (importErrors.length > 0) {
       setError('Please fix all validation errors before importing');
       return;
@@ -896,29 +1004,73 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
 
     try {
       setError(null);
-      const importPromises = importData.map(async (row) => {
-        const startStation = findStationByNameOrCode(row['Start Station'], row['Start Station Code']);
-        const endStation = findStationByNameOrCode(row['End Station'], row['End Station Code']);
+      
+      // Show translation progress modal
+      setTranslationProgress({
+        isTranslating: true,
+        currentRoute: 0,
+        totalRoutes: importData.length,
+        currentRouteName: '',
+        message: 'Starting import and translation process...'
+      });
+      
+      // Force a small delay to ensure modal shows
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-        if (!startStation) {
-          throw new Error(`Start station "${row['Start Station'].trim()}" (${row['Start Station Code'].trim()}) not found in system. Available stations: ${stations.map(s => `${s.station_name} (${s.station_code})`).join(', ')}`);
-        }
-        if (!endStation) {
-          throw new Error(`End station "${row['End Station'].trim()}" (${row['End Station Code'].trim()}) not found in system. Available stations: ${stations.map(s => `${s.station_name} (${s.station_code})`).join(', ')}`);
-        }
+      // Process routes one by one to show progress
+      const results = [];
+      for (let i = 0; i < importData.length; i++) {
+        const row = importData[i];
+        const trainName = row['Train Name'].toString();
+        
+        // Update progress
+        setTranslationProgress(prev => ({
+          ...prev,
+          currentRoute: i + 1,
+          currentRouteName: trainName,
+          message: `Processing route ${i + 1} of ${importData.length}: ${trainName}`
+        }));
 
-        return apiService.createTrainRoute({
-          train_number: row['Train Number'].toString(),
-          train_name: row['Train Name'].toString(),
-          train_name_hi: row['Train Name (Hindi)']?.toString() || row['Train Name'].toString(),
-          train_name_mr: row['Train Name (Marathi)']?.toString() || row['Train Name'].toString(),
-          train_name_gu: row['Train Name (Gujarati)']?.toString() || row['Train Name'].toString(),
-          start_station_id: startStation.id,
-          end_station_id: endStation.id
-        });
+        try {
+          const startStation = findStationByNameOrCode(row['Start Station'], row['Start Station Code']);
+          const endStation = findStationByNameOrCode(row['End Station'], row['End Station Code']);
+
+          if (!startStation) {
+            throw new Error(`Start station "${row['Start Station'].trim()}" (${row['Start Station Code'].trim()}) not found in system`);
+          }
+          if (!endStation) {
+            throw new Error(`End station "${row['End Station'].trim()}" (${row['End Station Code'].trim()}) not found in system`);
+          }
+
+          const result = await apiService.createTrainRoute({
+            train_number: row['Train Number'].toString(),
+            train_name: trainName,
+            // Let the backend handle translation if multilingual names are not provided
+            train_name_hi: '',
+            train_name_mr: '',
+            train_name_gu: '',
+            start_station_id: startStation.id,
+            end_station_id: endStation.id
+          });
+          results.push(result);
+          
+          // Small delay to make progress visible and give API time
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          console.error(`Error importing train route ${trainName}:`, error);
+          // Continue with other routes even if one fails
+        }
+      }
+
+      // Hide progress modal
+      setTranslationProgress({
+        isTranslating: false,
+        currentRoute: 0,
+        totalRoutes: 0,
+        currentRouteName: '',
+        message: ''
       });
 
-      await Promise.all(importPromises);
       await fetchData();
       setShowImportModal(false);
       setImportData([]);
@@ -927,9 +1079,17 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
       addToast({
         type: 'success',
         title: 'Import Successful',
-        message: `${importData.length} train routes have been imported successfully`
+        message: `${results.length} train routes have been imported and translated to multiple languages`
       });
     } catch (error: any) {
+      // Hide progress modal on error
+      setTranslationProgress({
+        isTranslating: false,
+        currentRoute: 0,
+        totalRoutes: 0,
+        currentRouteName: '',
+        message: ''
+      });
       setError(error.message);
       addToast({
         type: 'error',
@@ -1303,7 +1463,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               {editingRoute ? 'Edit Train Route' : 'Add New Train Route'}
             </h3>
@@ -1438,10 +1598,47 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
         </div>
       )}
 
+      {/* Translation Progress Modal */}
+      {translationProgress.isTranslating && (
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 border-2 border-gray-200 shadow-lg">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#337ab7] mx-auto mb-4"></div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Importing and Translating Train Routes</h3>
+              <p className="text-sm text-gray-600 mb-4">{translationProgress.message}</p>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-[#337ab7] h-2 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${translationProgress.totalRoutes > 0 ? (translationProgress.currentRoute / translationProgress.totalRoutes) * 100 : 0}%` 
+                  }}
+                ></div>
+              </div>
+              
+              {/* Progress Text */}
+              <div className="text-sm text-gray-700">
+                <p>Progress: {translationProgress.currentRoute} of {translationProgress.totalRoutes} routes</p>
+                {translationProgress.currentRouteName && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Current: {translationProgress.currentRouteName}
+                  </p>
+                )}
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-4 mb-4">
+                Please wait while train routes are being imported and translated to multiple languages...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto border-2 border-gray-200 shadow-lg">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">Import Train Routes from Excel</h3>
               <button
@@ -1452,8 +1649,9 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   setImportErrors([]);
                 }}
                 className="text-gray-400 hover:text-gray-600 p-1"
+                title="Close import modal"
               >
-                <X className="h-4 w-4" />
+                ✕
               </button>
             </div>
 
@@ -1475,13 +1673,14 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   <label
                     htmlFor="excel-upload"
                     className="cursor-pointer bg-[#337ab7] hover:bg-[#2e6da4] text-white px-3 py-1.5 rounded-none inline-flex items-center space-x-1 text-sm"
+                    title="Select an Excel file to import train routes"
                   >
-                    <Upload className="h-3 w-3" />
-                    <span>Choose Excel File</span>
+                    Choose Excel File
                   </label>
                                   <p className="text-sm text-gray-500 mt-2">
-                  Upload an Excel file with required columns: Train Number, Train Name, Start Station, Start Station Code, End Station, End Station Code<br/>
-                  Optional columns: Train Name (Hindi), Train Name (Marathi), Train Name (Gujarati)
+                  Upload an Excel file with train route information<br/>
+                  <strong>Required:</strong> Train Number, Train Name, Start Station, Start Station Code, End Station, End Station Code<br/>
+                  <em>Note: English train names will be automatically translated to Hindi, Marathi, and Gujarati</em>
                 </p>
                 </div>
               </div>
@@ -1493,20 +1692,15 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                   <p className="mb-2">Your Excel file must have these exact column headers:</p>
                   <ul className="list-disc list-inside space-y-1">
                     <li><strong>Train Number</strong> - Unique identifier for the train</li>
-                    <li><strong>Train Name</strong> - Name of the train</li>
+                    <li><strong>Train Name</strong> - Name of the train (English)</li>
                     <li><strong>Start Station</strong> - Starting station name</li>
                     <li><strong>Start Station Code</strong> - Starting station code (e.g., NDLS)</li>
                     <li><strong>End Station</strong> - Destination station name</li>
                     <li><strong>End Station Code</strong> - Destination station code (e.g., MMCT)</li>
                   </ul>
-                  <p className="mt-2 text-xs font-medium text-[#337ab7]">Optional columns:</p>
-                  <ul className="list-disc list-inside space-y-1 text-xs">
-                    <li><strong>Train Name (Hindi)</strong> - Train name in Hindi</li>
-                    <li><strong>Train Name (Marathi)</strong> - Train name in Marathi</li>
-                    <li><strong>Train Name (Gujarati)</strong> - Train name in Gujarati</li>
-                  </ul>
                   <p className="mt-2 text-xs">
-                    Note: Station names must match existing stations in the system
+                    Note: Station names must match existing stations in the system.<br/>
+                    English train names will be automatically translated to Hindi, Marathi, and Gujarati.
                   </p>
                 </div>
               </div>

@@ -1,6 +1,40 @@
 import express from 'express';
 import { dbRun, dbGet, dbAll } from '../database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import axios from 'axios';
+
+// Function to translate text using the FastAPI translation service
+async function translateStationName(englishName: string): Promise<{ hi: string; mr: string; gu: string }> {
+  try {
+    const response = await axios.post('http://localhost:5001/translate', {
+      text: englishName,
+      source_language: 'en'
+    });
+
+    if (response.data.success) {
+      return {
+        hi: response.data.translations.Hindi || englishName,
+        mr: response.data.translations.Marathi || englishName,
+        gu: response.data.translations.Gujarati || englishName
+      };
+    } else {
+      console.error('Translation failed:', response.data);
+      return {
+        hi: englishName,
+        mr: englishName,
+        gu: englishName
+      };
+    }
+  } catch (error) {
+    console.error('Error translating station name:', error);
+    // Return English name as fallback for all languages
+    return {
+      hi: englishName,
+      mr: englishName,
+      gu: englishName
+    };
+  }
+}
 
 const router = express.Router();
 
@@ -91,9 +125,29 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Station code already exists' });
     }
 
+    // If multilingual names are not provided, translate the English name
+    let finalHindiName = station_name_hi;
+    let finalMarathiName = station_name_mr;
+    let finalGujaratiName = station_name_gu;
+
+    if (!station_name_hi || !station_name_mr || !station_name_gu) {
+      console.log(`Translating station name: ${station_name}`);
+      const translations = await translateStationName(station_name);
+      
+      finalHindiName = station_name_hi || translations.hi;
+      finalMarathiName = station_name_mr || translations.mr;
+      finalGujaratiName = station_name_gu || translations.gu;
+      
+      console.log(`Translation results for ${station_name}:`, {
+        hindi: finalHindiName,
+        marathi: finalMarathiName,
+        gujarati: finalGujaratiName
+      });
+    }
+
     const result = await dbRun(
       'INSERT INTO stations (station_name, station_code, station_name_hi, station_name_mr, station_name_gu) VALUES (?, ?, ?, ?, ?)',
-      [station_name, station_code.toUpperCase(), station_name_hi || station_name, station_name_mr || station_name, station_name_gu || station_name]
+      [station_name, station_code.toUpperCase(), finalHindiName, finalMarathiName, finalGujaratiName]
     );
 
     const newStation = await dbGet('SELECT * FROM stations WHERE id = ?', [result.lastID]);
@@ -120,9 +174,29 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Station code already exists' });
     }
 
+    // If multilingual names are not provided, translate the English name
+    let finalHindiName = station_name_hi;
+    let finalMarathiName = station_name_mr;
+    let finalGujaratiName = station_name_gu;
+
+    if (!station_name_hi || !station_name_mr || !station_name_gu) {
+      console.log(`Translating station name for update: ${station_name}`);
+      const translations = await translateStationName(station_name);
+      
+      finalHindiName = station_name_hi || translations.hi;
+      finalMarathiName = station_name_mr || translations.mr;
+      finalGujaratiName = station_name_gu || translations.gu;
+      
+      console.log(`Translation results for ${station_name}:`, {
+        hindi: finalHindiName,
+        marathi: finalMarathiName,
+        gujarati: finalGujaratiName
+      });
+    }
+
     await dbRun(
       'UPDATE stations SET station_name = ?, station_code = ?, station_name_hi = ?, station_name_mr = ?, station_name_gu = ? WHERE id = ?',
-      [station_name, station_code.toUpperCase(), station_name_hi || station_name, station_name_mr || station_name, station_name_gu || station_name, id]
+      [station_name, station_code.toUpperCase(), finalHindiName, finalMarathiName, finalGujaratiName, id]
     );
 
     const updatedStation = await dbGet('SELECT * FROM stations WHERE id = ?', [id]);
