@@ -17,6 +17,9 @@ from database import get_db
 from models import AnnouncementTemplate, AnnouncementAudioSegment, AudioFile
 from config import Config
 
+# Global progress tracking
+generation_progress = {}
+
 router = APIRouter(prefix="/final-announcement", tags=["final-announcement"])
 
 def get_audio_segments_for_template(template_id: int, db: Session) -> Dict[str, List[Dict]]:
@@ -292,6 +295,10 @@ def get_existing_audio_for_placeholder(placeholder: str, value: str, language: s
 def concatenate_audio_files(audio_paths: List[str], output_path: str) -> bool:
     """Concatenate multiple audio files into a single file"""
     try:
+        print(f"🔧 Starting audio concatenation...")
+        print(f"   Input paths: {audio_paths}")
+        print(f"   Output path: {output_path}")
+        
         if not audio_paths:
             print("⚠️ No audio paths provided for concatenation")
             return False
@@ -302,28 +309,44 @@ def concatenate_audio_files(audio_paths: List[str], output_path: str) -> bool:
             print("⚠️ No valid audio paths found")
             return False
         
+        print(f"   Valid paths: {valid_paths}")
+        
         # Load the first audio file
         audio_dir = "/var/www/audio_files"
         first_file_path = os.path.join(audio_dir, valid_paths[0].replace('/audio_files/', ''))
+        
+        print(f"   First file path: {first_file_path}")
+        print(f"   First file exists: {os.path.exists(first_file_path)}")
         
         if not os.path.exists(first_file_path):
             print(f"❌ First audio file not found: {first_file_path}")
             return False
             
+        print(f"   Loading first audio file...")
         combined_audio = AudioSegment.from_mp3(first_file_path)
+        print(f"   First audio loaded successfully")
         
         # Concatenate remaining audio files
-        for audio_path in valid_paths[1:]:
+        for i, audio_path in enumerate(valid_paths[1:], 1):
             file_path = os.path.join(audio_dir, audio_path.replace('/audio_files/', ''))
+            print(f"   Processing file {i+1}: {file_path}")
+            print(f"   File exists: {os.path.exists(file_path)}")
+            
             if os.path.exists(file_path):
+                print(f"   Loading audio segment...")
                 audio_segment = AudioSegment.from_mp3(file_path)
+                print(f"   Concatenating...")
                 combined_audio += audio_segment
+                print(f"   ✅ File {i+1} concatenated successfully")
             else:
                 print(f"⚠️ Audio file not found: {file_path}")
         
         # Export the combined audio
+        print(f"   Exporting combined audio...")
         combined_audio.export(output_path, format="mp3")
         print(f"✅ Combined audio saved to: {output_path}")
+        print(f"   Output file exists: {os.path.exists(output_path)}")
+        print(f"   Output file size: {os.path.getsize(output_path) if os.path.exists(output_path) else 'N/A'} bytes")
         return True
         
     except Exception as e:
@@ -338,8 +361,23 @@ def generate_final_announcement_audio_background(
     db: Session
 ):
     """Background task to generate final announcement audio using template text directly"""
+    global generation_progress
+    
+    # Initialize progress for this generation
+    generation_key = f"{template_id}_{train_data.get('train_number', 'unknown')}"
+    generation_progress[generation_key] = {
+        "status": "starting",
+        "current_language": "",
+        "total_languages": 4,
+        "completed_languages": 0,
+        "final_audio_files": {},
+        "merged_audio_path": None,
+        "error": None
+    }
+    
     try:
         print(f"🎵 Starting final announcement generation for template ID: {template_id}")
+        generation_progress[generation_key]["status"] = "processing"
         
         # Get the template
         template = db.query(AnnouncementTemplate).filter(
@@ -349,11 +387,15 @@ def generate_final_announcement_audio_background(
         
         if not template:
             print(f"❌ Template with ID {template_id} not found")
+            generation_progress[generation_key]["error"] = "Template not found"
+            generation_progress[generation_key]["status"] = "error"
             return
         
-        # Create output directory
+        # Create output directories
         output_dir = "/var/www/audio_files/final_announcements"
+        merged_dir = "/var/www/audio_files/merged"
         os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(merged_dir, exist_ok=True)
         
         # Generate timestamp for unique naming
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -362,9 +404,11 @@ def generate_final_announcement_audio_background(
         final_audio_files = {}
         languages = ['english', 'marathi', 'hindi', 'gujarati']
         
-        for language in languages:
+        for i, language in enumerate(languages):
             try:
                 print(f"🔄 Processing {language} final announcement...")
+                generation_progress[generation_key]["current_language"] = language
+                generation_progress[generation_key]["completed_languages"] = i
                 
                 # Get the template text for this language
                 template_text = getattr(template, f"{language}_text", template.english_text)
@@ -468,6 +512,52 @@ def generate_final_announcement_audio_background(
                 import traceback
                 traceback.print_exc()
         
+        # Update progress
+        generation_progress[generation_key]["completed_languages"] = len(languages)
+        generation_progress[generation_key]["final_audio_files"] = final_audio_files
+        
+        # Merge all language audio files in sequence: English, Hindi, Marathi, Gujarati
+        if len(final_audio_files) == 4:
+            print(f"🔄 Merging all language audio files...")
+            print(f"   Final audio files: {final_audio_files}")
+            generation_progress[generation_key]["status"] = "merging"
+            
+            # Create merged audio filename
+            merged_filename = f"merged_announcement_{train_data.get('train_number', 'unknown')}_{template.category}_{timestamp}.mp3"
+            merged_path = os.path.join(merged_dir, merged_filename)
+            print(f"   Merged output path: {merged_path}")
+            
+            # Prepare audio files in correct sequence
+            sequence_languages = ['english', 'hindi', 'marathi', 'gujarati']
+            audio_files_to_merge = []
+            
+            for lang in sequence_languages:
+                if lang in final_audio_files:
+                    # Use the relative path as expected by concatenate_audio_files
+                    audio_path = final_audio_files[lang]['audio_path']
+                    audio_files_to_merge.append(audio_path)
+                    print(f"   📁 Added {lang} audio: {audio_path}")
+                else:
+                    print(f"   ⚠️ Missing {lang} audio file")
+            
+            print(f"   Audio files to merge: {audio_files_to_merge}")
+            print(f"   Number of files to merge: {len(audio_files_to_merge)}")
+            
+            # Merge audio files
+            if concatenate_audio_files(audio_files_to_merge, merged_path):
+                merged_audio_path = f"/audio_files/merged/{merged_filename}"
+                generation_progress[generation_key]["merged_audio_path"] = merged_audio_path
+                generation_progress[generation_key]["status"] = "completed"
+                print(f"✅ Merged audio generated: {merged_audio_path}")
+            else:
+                generation_progress[generation_key]["error"] = "Failed to merge audio files"
+                generation_progress[generation_key]["status"] = "error"
+                print(f"❌ Failed to merge audio files")
+        else:
+            generation_progress[generation_key]["error"] = f"Only {len(final_audio_files)} out of 4 language files generated"
+            generation_progress[generation_key]["status"] = "error"
+            print(f"⚠️ Only {len(final_audio_files)} out of 4 language files generated")
+        
         # Save final announcement data to database or return results
         print(f"🎉 Final announcement generation completed for template ID: {template_id}")
         print(f"Generated files: {list(final_audio_files.keys())}")
@@ -478,6 +568,8 @@ def generate_final_announcement_audio_background(
         print(f"❌ Error generating final announcement: {e}")
         import traceback
         traceback.print_exc()
+        generation_progress[generation_key]["error"] = str(e)
+        generation_progress[generation_key]["status"] = "error"
 
 from pydantic import BaseModel
 
@@ -537,7 +629,8 @@ async def generate_final_announcement(
             "template_id": request.template_id,
             "category": template.category,
             "title": template.title,
-            "train_data": request.train_data
+            "train_data": request.train_data,
+            "generation_key": f"{request.template_id}_{request.train_data.get('train_number', 'unknown')}"
         }
         
     except HTTPException:
@@ -545,6 +638,27 @@ async def generate_final_announcement(
     except Exception as e:
         print(f"❌ Error starting final announcement generation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start final announcement generation: {str(e)}")
+
+@router.get("/progress/{generation_key}")
+async def check_generation_progress(generation_key: str):
+    """Check the progress of final announcement generation"""
+    global generation_progress
+    
+    if generation_key not in generation_progress:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    
+    progress = generation_progress[generation_key]
+    
+    return {
+        "generation_key": generation_key,
+        "status": progress["status"],
+        "current_language": progress["current_language"],
+        "total_languages": progress["total_languages"],
+        "completed_languages": progress["completed_languages"],
+        "final_audio_files": progress["final_audio_files"],
+        "merged_audio_path": progress["merged_audio_path"],
+        "error": progress["error"]
+    }
 
 @router.get("/templates/{template_id}/segments")
 async def get_template_segments(template_id: int, db: Session = Depends(get_db)):

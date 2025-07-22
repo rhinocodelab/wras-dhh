@@ -68,6 +68,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const [generatedFiles, setGeneratedFiles] = useState<{
     audioFile?: string;
     videoFile?: string;
+    finalAnnouncementFiles?: string[];
   }>({});
 
   const announcementCategories = [
@@ -386,113 +387,133 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         setProgressMessage('Generating ISL video...');
         await generateISLVideo(texts.english);
         
-        // Check for existing audio files first, then generate if needed
-        setProgressMessage('Checking for existing audio files...');
+        // Use Final Announcement API to generate audio using template segments and placeholder audio
+        setProgressMessage('Generating final announcement audio...');
         
-        const audioPromises = [];
-        const languages = [
-          { key: 'english', text: texts.english },
-          { key: 'hindi', text: texts.hindi },
-          { key: 'marathi', text: texts.marathi },
-          { key: 'gujarati', text: texts.gujarati }
-        ];
-        
-        for (const lang of languages) {
-          // First check if audio file already exists
-          const checkResponse = await fetch('http://localhost:5001/api/audio-files/check-duplicate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              english_text: lang.text
-            })
-          });
-          
-          if (checkResponse.ok) {
-            const checkResult = await checkResponse.json();
-            
-            if (checkResult.has_duplicates && checkResult.duplicates.length > 0) {
-              // Use existing audio file
-              const existingAudio = checkResult.duplicates[0];
-              const audioPath = existingAudio[`${lang.key}_audio_path`];
-              
-              if (audioPath) {
-                audioPromises.push(Promise.resolve({
-                  audio_path: audioPath,
-                  language: lang.key,
-                  is_existing: true
-                }));
-                setProgressMessage(`Using existing ${lang.key} audio...`);
-                continue;
-              }
-            }
-          }
-          
-          // Generate new audio file if not found
-          setProgressMessage(`Generating ${lang.key} audio...`);
-          const generateResponse = await fetch('http://localhost:5001/api/audio-files/single-language', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text: lang.text,
-              language: lang.key
-            })
-          });
-          
-          if (generateResponse.ok) {
-            const newAudio = await generateResponse.json();
-            audioPromises.push(Promise.resolve({
-              ...newAudio,
-              language: lang.key,
-              is_existing: false
-            }));
-          } else {
-            throw new Error(`Failed to generate ${lang.key} audio`);
-          }
-        }
-        
-        setProgressMessage('Processing audio files...');
-        const audioFiles = await Promise.all(audioPromises);
-        
-        // Merge the audio files
-        setProgressMessage('Merging audio files...');
-        const mergeResponse = await fetch('http://localhost:5001/api/audio-files/merge', {
+        // Prepare train data for the final announcement
+        const trainData = {
+          train_number: searchResultRoute.train_number,
+          train_name: searchResultRoute.train_name,
+          start_station_name: searchResultRoute.start_station_name,
+          end_station_name: searchResultRoute.end_station_name,
+          platform_number: platform,
+          start_station_code: searchResultRoute.start_station_code,
+          end_station_code: searchResultRoute.end_station_code
+        };
+
+        // Generate final announcement using template segments
+        const finalAnnouncementResponse = await fetch('http://localhost:5001/api/final-announcement/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
-            audio_files: audioFiles.map(file => `/var/www${file.audio_path}`),
-            output_filename: `merged_announcement_${searchResultRoute.train_number}_${category}_${Date.now()}.wav`
-          })
+            template_id: template.id,
+            train_data: trainData
+          }),
         });
-        
-        if (mergeResponse.ok) {
-          const mergedAudio = await mergeResponse.json();
-          setProgressMessage('Playing merged announcement...');
+
+        if (finalAnnouncementResponse.ok) {
+          const finalResult = await finalAnnouncementResponse.json();
+          const generationKey = finalResult.generation_key;
           
-          // Store the merged audio path for the modal
-          setMergedAudioPath(mergedAudio.audio_path);
+          // Poll for progress
+          let progress = null;
+          let attempts = 0;
+          const maxAttempts = 60; // 5 minutes with 5-second intervals
           
-          // Store the audio file path for cleanup
-          setGeneratedFiles(prev => ({
-            ...prev,
-            audioFile: mergedAudio.audio_path
-          }));
+          while (attempts < maxAttempts) {
+            setProgressMessage(`Processing audio files... (${attempts + 1}/${maxAttempts})`);
+            
+            try {
+              const progressResponse = await fetch(`http://localhost:5001/api/final-announcement/progress/${generationKey}`);
+              if (progressResponse.ok) {
+                progress = await progressResponse.json();
+                
+                if (progress.status === 'completed') {
+                  setProgressMessage('Audio generation completed!');
+                  setMergedAudioPath(progress.merged_audio_path);
+                  
+                  // Store merged audio file for cleanup
+                  if (progress.merged_audio_path) {
+                    console.log('🎵 Storing merged audio file for cleanup:', progress.merged_audio_path);
+                    setGeneratedFiles(prev => {
+                      const newState = {
+                        ...prev,
+                        audioFile: progress.merged_audio_path
+                      };
+                      console.log('📁 Updated generatedFiles state:', newState);
+                      return newState;
+                    });
+                  }
+                  
+                  // Store final announcement files for cleanup
+                  if (progress.final_audio_files) {
+                    const finalFiles = Object.values(progress.final_audio_files).map((file: any) => file.audio_path);
+                    console.log('🎵 Storing final announcement files for cleanup:', finalFiles);
+                    setGeneratedFiles(prev => {
+                      const newState = {
+                        ...prev,
+                        finalAnnouncementFiles: finalFiles
+                      };
+                      console.log('📁 Updated generatedFiles state with final files:', newState);
+                      return newState;
+                    });
+                  } else {
+                    console.log('📝 No final audio files in progress response');
+                  }
+                  break;
+                } else if (progress.status === 'error') {
+                  throw new Error(progress.error || 'Audio generation failed');
+                } else if (progress.status === 'merging') {
+                  setProgressMessage('Merging audio files...');
+                } else {
+                  const currentLang = progress.current_language || 'Unknown';
+                  const completed = progress.completed_languages || 0;
+                  const total = progress.total_languages || 4;
+                  setProgressMessage(`Processing ${currentLang}... (${completed}/${total})`);
+                }
+              }
+            } catch (error) {
+              console.error('Error checking progress:', error);
+            }
+            
+            // Wait 5 seconds before next check
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            attempts++;
+          }
           
-          // Calculate reuse statistics
-          const existingCount = audioFiles.filter(file => file.is_existing).length;
-          const newCount = audioFiles.filter(file => !file.is_existing).length;
-          
-          // Close progress modal and show success
-          setShowProgressModal(false);
-          addToast({
-            type: 'success',
-            title: 'Success',
-            message: `Merged announcement audio generated successfully (${existingCount} reused, ${newCount} new)`
-          });
-          
-          // Show the announcement modal with texts
-          setShowAnnouncementModal(true);
+          if (progress && progress.status === 'completed') {
+            // Close progress modal and show success
+            setShowProgressModal(false);
+            addToast({
+              type: 'success',
+              title: 'Audio Generation Completed',
+              message: `Final announcement audio generated successfully for ${searchResultRoute.train_name} (${searchResultRoute.train_number})`
+            });
+            
+            // Show the announcement modal with texts and play button
+            setShowAnnouncementModal(true);
+          } else {
+            setShowProgressModal(false);
+            addToast({
+              type: 'error',
+              title: 'Audio Generation Timeout',
+              message: 'Audio generation took too long. Please check the Final Announcements section.'
+            });
+          }
         } else {
-          throw new Error('Failed to merge audio files');
+          const errorData = await finalAnnouncementResponse.json();
+          if (finalAnnouncementResponse.status === 400 && 'No audio segments found' in errorData.detail) {
+            setShowProgressModal(false);
+            addToast({
+              type: 'warning',
+              title: 'Audio Segments Required',
+              message: `Please generate audio segments for the ${category} template first in the Announcement Templates section`
+            });
+          } else {
+            throw new Error(errorData.detail || 'Failed to generate final announcement');
+          }
         }
       } else {
         setShowProgressModal(false);
@@ -547,13 +568,26 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       // Add audio file to deletion list
       if (generatedFiles.audioFile) {
         filesToDelete.push(generatedFiles.audioFile);
-        console.log('🎵 Added audio file to delete:', generatedFiles.audioFile);
+        console.log('🎵 Added merged audio file to delete:', generatedFiles.audioFile);
+      } else {
+        console.log('📝 No merged audio file to delete');
       }
       
       // Add video file to deletion list
       if (generatedFiles.videoFile) {
         filesToDelete.push(generatedFiles.videoFile);
         console.log('🎬 Added video file to delete:', generatedFiles.videoFile);
+      }
+      
+      // Add final announcement files to deletion list
+      if (generatedFiles.finalAnnouncementFiles && generatedFiles.finalAnnouncementFiles.length > 0) {
+        console.log('🎵 Final announcement files to delete:', generatedFiles.finalAnnouncementFiles);
+        for (const finalFile of generatedFiles.finalAnnouncementFiles) {
+          filesToDelete.push(finalFile);
+          console.log('🎵 Added final announcement file to delete:', finalFile);
+        }
+      } else {
+        console.log('📝 No final announcement files to delete');
       }
       
       // Delete files from server
@@ -585,6 +619,8 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       // Clear generated files state
       setGeneratedFiles({});
       console.log('✅ Cleanup process completed');
+      console.log('🗑️ Total files deleted:', filesToDelete.length);
+      console.log('🗑️ Files deleted:', filesToDelete);
       
     } catch (error) {
       console.error('💥 Error during cleanup:', error);
@@ -938,6 +974,9 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                 <h3 className="text-base font-semibold text-gray-900">
                   Announcement for {selectedRoute.train_name} ({selectedRoute.train_number})
                 </h3>
+                <div className="text-xs text-gray-500">
+                  Using template segments + placeholder audio + merged playback
+                </div>
                 <button
                   onClick={async () => {
                     if (currentAudio) {
@@ -987,13 +1026,23 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                     <p className="text-gray-700 text-xs">{announcementTexts.gujarati}</p>
                   </div>
                   
+                  {/* Audio Status and Play Button */}
+                  <div className="flex justify-between items-center mt-2">
+                    <div className="text-xs text-gray-600">
+                      <span className="font-medium">Audio Status:</span>
+                      <span className={`ml-1 ${mergedAudioPath ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {mergedAudioPath ? 'Ready to Play' : 'Generating...'}
+                      </span>
+                    </div>
+                  </div>
+                  
                   {/* Play Button */}
                   <div className="flex justify-end gap-2 mt-2">
                     {mergedAudioPath && (
                       <>
                         <button
                           onClick={handlePlayAnnouncement}
-                          className="px-3 py-1 text-xs font-medium text-white bg-[#337ab7] rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#f0f4f8]0 focus:ring-offset-2 flex items-center gap-1"
+                          className="px-3 py-1 text-xs font-medium text-white bg-[#337ab7] rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2 flex items-center gap-1"
                         >
                           <Volume2 className="h-3 w-3" />
                           Play Announcement

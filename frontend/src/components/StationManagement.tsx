@@ -1421,51 +1421,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
                 />
               </div>
               
-              {/* Multilingual Station Names */}
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Multilingual Station Names (Optional)</h4>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Station Name (Hindi)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.station_name_hi}
-                      onChange={(e) => setFormData({ ...formData, station_name_hi: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent text-sm"
-                      placeholder="Enter Hindi station name"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Station Name (Marathi)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.station_name_mr}
-                      onChange={(e) => setFormData({ ...formData, station_name_mr: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent text-sm"
-                      placeholder="Enter Marathi station name"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Station Name (Gujarati)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.station_name_gu}
-                      onChange={(e) => setFormData({ ...formData, station_name_gu: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent text-sm"
-                      placeholder="Enter Gujarati station name"
-                    />
-                  </div>
-                </div>
-              </div>
+
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"

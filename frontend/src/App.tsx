@@ -22,6 +22,7 @@ function AppContent() {
   const [routes, setRoutes] = useState<TrainRoute[]>([]);
   const [dashboardKey, setDashboardKey] = useState(0); // Force dashboard refresh
   const [audioFilesKey, setAudioFilesKey] = useState(0); // Force audio files refresh
+  const [islDictionaryKey, setIslDictionaryKey] = useState(0); // Force ISL dictionary refresh
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -97,6 +98,10 @@ function AppContent() {
     setAudioFilesKey(prev => prev + 1);
   };
 
+  const refreshISLDictionary = () => {
+    setIslDictionaryKey(prev => prev + 1);
+  };
+
   if (!user) {
     return (
       <Login
@@ -122,9 +127,17 @@ function AppContent() {
       case 'announcement-audios':
         return <AnnouncementAudios />;
       case 'isl-dictionary':
-        return <ISLDictionary />;
+        return <ISLDictionary key={islDictionaryKey} />;
       default:
         return <Dashboard stationCount={stations.length} routeCount={routes.length} />;
+    }
+  };
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    // Trigger refresh when ISL Dictionary tab is selected
+    if (tab === 'isl-dictionary') {
+      refreshISLDictionary();
     }
   };
 
@@ -132,7 +145,7 @@ function AppContent() {
     <Layout
       user={user}
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={handleTabChange}
       onLogout={handleLogout}
     >
       {renderContent()}

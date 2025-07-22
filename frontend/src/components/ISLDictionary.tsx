@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Volume2, Search, Hand, X } from 'lucide-react';
+import { Play, Pause, Volume2, Search, Hand, X, RefreshCw } from 'lucide-react';
 import { useToast } from './ToastContainer';
 
 interface ISLVideo {
@@ -22,29 +22,7 @@ export default function ISLDictionary() {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(7);
-
-  // ISL video data based on the isl_dataset structure
-  const islVideos: ISLVideo[] = [
-    // Numbers
-    { id: '1', name: 'Number 1', category: 'numbers', path: '/isl_videos/1/1.mp4', size: '329KB' },
-    { id: '2', name: 'Number 2', category: 'numbers', path: '/isl_videos/2/2.mp4', size: '390KB' },
-    { id: '3', name: 'Number 3', category: 'numbers', path: '/isl_videos/3/3.mp4', size: '375KB' },
-    
-    // Common Railway Terms
-    { id: 'arriving', name: 'Arriving', category: 'railway-terms', path: '/isl_videos/arriving/arriving.mp4', size: '735KB' },
-    { id: 'attention', name: 'Attention', category: 'railway-terms', path: '/isl_videos/attention/attention.mp4', size: '544KB' },
-    { id: 'cancelled', name: 'Cancelled', category: 'railway-terms', path: '/isl_videos/cancelled/cancelled.mp4', size: '562KB' },
-    { id: 'express', name: 'Express', category: 'railway-terms', path: '/isl_videos/express/express.mp4', size: '711KB' },
-    { id: 'late', name: 'Late', category: 'railway-terms', path: '/isl_videos/late/late.mp4', size: '553KB' },
-    { id: 'number', name: 'Number', category: 'railway-terms', path: '/isl_videos/number/number.mp4', size: '426KB' },
-    { id: 'platform', name: 'Platform', category: 'railway-terms', path: '/isl_videos/platform/platform.mp4', size: '692KB' },
-    { id: 'running', name: 'Running', category: 'railway-terms', path: '/isl_videos/running/running.mp4', size: '540KB' },
-    { id: 'train', name: 'Train', category: 'railway-terms', path: '/isl_videos/train/train.mp4', size: '468KB' },
-    
-    // Station Names
-    { id: 'bandra', name: 'Bandra', category: 'stations', path: '/isl_videos/bandra/bandra.mp4', size: '3.0MB' },
-    { id: 'vapi', name: 'Vapi', category: 'stations', path: '/isl_videos/vapi/vapi.mp4', size: '2.2MB' },
-  ];
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const categories = [
     { id: 'all', name: 'All Categories' },
@@ -53,10 +31,38 @@ export default function ISLDictionary() {
     { id: 'stations', name: 'Station Names' },
   ];
 
+  const fetchISLVideos = async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await fetch('http://localhost:5001/api/scan-isl-dataset');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch ISL videos');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setVideos(data.videos);
+        setFilteredVideos(data.videos);
+      } else {
+        throw new Error(data.message || 'Failed to scan ISL dataset');
+      }
+    } catch (error: any) {
+      console.error('Error fetching ISL videos:', error);
+      addToast({
+        type: 'error',
+        title: 'Scan Failed',
+        message: error.message || 'Failed to scan ISL dataset'
+      });
+    } finally {
+      setIsRefreshing(false);
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setVideos(islVideos);
-    setFilteredVideos(islVideos);
-    setIsLoading(false);
+    fetchISLVideos();
   }, []);
 
   useEffect(() => {
@@ -142,11 +148,21 @@ export default function ISLDictionary() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">ISL Dictionary</h1>
-        <p className="text-gray-600 text-xs">
-          Indian Sign Language videos for railway announcements. Click on any video to play the ISL sign.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">ISL Dictionary</h1>
+          <p className="text-gray-600 text-xs">
+            Indian Sign Language videos for railway announcements. Click on any video to play the ISL sign.
+          </p>
+        </div>
+        <button
+          onClick={fetchISLVideos}
+          disabled={isRefreshing}
+          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[#337ab7] rounded-none hover:bg-[#2e6da4] focus:ring-2 focus:ring-[#337ab7] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Scanning...' : 'Refresh'}
+        </button>
       </div>
 
       {/* Search and Filter Controls */}

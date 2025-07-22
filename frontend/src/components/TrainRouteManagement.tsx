@@ -1495,51 +1495,7 @@ export default function TrainRouteManagement({ onDataChange, onAudioChange }: Tr
                 />
               </div>
               
-              {/* Multilingual Train Names */}
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Multilingual Train Names (Optional)</h4>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Train Name (Hindi)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.train_name_hi}
-                      onChange={(e) => setFormData({ ...formData, train_name_hi: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent text-sm"
-                      placeholder="Enter Hindi train name"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Train Name (Marathi)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.train_name_mr}
-                      onChange={(e) => setFormData({ ...formData, train_name_mr: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent text-sm"
-                      placeholder="Enter Marathi train name"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Train Name (Gujarati)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.train_name_gu}
-                      onChange={(e) => setFormData({ ...formData, train_name_gu: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#f0f4f8]0 focus:border-transparent text-sm"
-                      placeholder="Enter Gujarati train name"
-                    />
-                  </div>
-                </div>
-              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Start Station

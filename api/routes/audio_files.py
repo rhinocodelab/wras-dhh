@@ -46,8 +46,38 @@ def generate_speech(text: str, filepath: str, voice_name: str):
         print(f"   TTS: Starting speech generation for voice: {voice_name}")
         print(f"   TTS: Input text length: {len(text)} characters")
         
+        # Function to convert digits to words for better pronunciation
+        def convert_digits_to_words(text: str) -> str:
+            import re
+            # Replace individual digits with their word equivalents
+            digit_mapping = {
+                '0': 'zero',
+                '1': 'one',
+                '2': 'two',
+                '3': 'three',
+                '4': 'four',
+                '5': 'five',
+                '6': 'six',
+                '7': 'seven',
+                '8': 'eight',
+                '9': 'nine'
+            }
+            
+            # Use regex to find and replace digits while preserving other characters
+            def replace_digit(match):
+                digit = match.group(0)
+                return digit_mapping.get(digit, digit)
+            
+            # Replace digits with words
+            processed_text = re.sub(r'\d', replace_digit, text)
+            return processed_text
+
+        # Process the text to convert digits to words
+        processed_text = convert_digits_to_words(text)
+        print(f"   TTS: Processed text: {processed_text[:100]}...")
+        
         # Configure the text-to-speech request
-        synthesis_input = texttospeech.SynthesisInput(text=text)
+        synthesis_input = texttospeech.SynthesisInput(text=processed_text)
         
         # Configure the voice
         language_code = voice_name.split('-')[0] + '-' + voice_name.split('-')[1]
@@ -637,6 +667,98 @@ async def cleanup_station_audio_files(db: Session = Depends(get_db)):
         print(f"❌ Error during aggressive cleanup: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clean up audio files: {str(e)}")
 
+def find_existing_audio_for_text(text: str, language: str, db: Session):
+    """Find existing audio file for a given text and language"""
+    try:
+        print(f"🔍 Looking for audio for text: '{text}' in language: {language}")
+        
+        # Look for exact match first
+        audio_file = db.query(AudioFile).filter(
+            AudioFile.english_text == text,
+            AudioFile.is_active == True
+        ).first()
+        
+        if audio_file:
+            audio_path = getattr(audio_file, f"{language}_audio_path")
+            if audio_path:
+                print(f"✅ Found exact match: {audio_path}")
+                return audio_path
+        
+        # If no exact match, try to find individual words
+        words = text.lower().split()
+        word_audio_paths = []
+        
+        for word in words:
+            # Clean the word (remove punctuation)
+            clean_word = ''.join(c for c in word if c.isalnum())
+            if clean_word:
+                # Check if this is a number (0-9)
+                number_words = {
+                    'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4',
+                    'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9'
+                }
+                
+                # Check if this is a digit (0-9)
+                if clean_word.isdigit() and len(clean_word) == 1:
+                    digit = clean_word
+                    print(f"   Found digit '{digit}', looking for digit '{digit}' in {language}")
+                    
+                    # Debug: Let's see what's actually in the database for numbers
+                    all_number_files = db.query(AudioFile).filter(
+                        AudioFile.english_text.in_(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']),
+                        AudioFile.is_active == True
+                    ).all()
+                    print(f"   Available number files in database:")
+                    for num_file in all_number_files:
+                        print(f"     - '{num_file.english_text}': {getattr(num_file, f'{language}_audio_path', 'None')}")
+                    
+                    # Look for the digit in the specified language
+                    digit_audio = db.query(AudioFile).filter(
+                        AudioFile.english_text == digit,
+                        AudioFile.is_active == True
+                    ).first()
+                    
+                    if digit_audio:
+                        digit_path = getattr(digit_audio, f"{language}_audio_path")
+                        if digit_path:
+                            word_audio_paths.append(digit_path)
+                            print(f"   Found {language} audio for digit '{digit}': {digit_path}")
+                        else:
+                            print(f"   No {language} audio path found for digit '{digit}'")
+                            return None
+                    else:
+                        print(f"   No audio file found for digit '{digit}'")
+                        return None
+                else:
+                    # For non-number words, look for the word in the specified language
+                    word_audio = db.query(AudioFile).filter(
+                        AudioFile.english_text == clean_word,
+                        AudioFile.is_active == True
+                    ).first()
+                    
+                    if word_audio:
+                        word_path = getattr(word_audio, f"{language}_audio_path")
+                        if word_path:
+                            word_audio_paths.append(word_path)
+                            print(f"   Found {language} audio for word '{clean_word}': {word_path}")
+                        else:
+                            print(f"   No {language} audio path found for word '{clean_word}'")
+                            return None
+                    else:
+                        print(f"   No audio file found for word '{clean_word}'")
+                        return None
+        
+        # If we have all words, we can concatenate them
+        if len(word_audio_paths) == len(words):
+            print(f"   Successfully found all {len(word_audio_paths)} audio files for {language}")
+            return word_audio_paths
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error finding existing audio for text '{text}': {e}")
+        return None
+
 @router.post("/single-language")
 async def generate_single_language_audio(
     request: SingleLanguageAudioRequest,
@@ -670,8 +792,64 @@ async def generate_single_language_audio(
         print(f"🎵 Generating {request.language} audio for text: {request.text[:100]}...")
         print(f"   Output file: {filepath}")
         
-        # Generate speech
-        generate_speech(request.text.strip(), filepath, voice_config)
+        # First try to find existing audio files
+        existing_audio = find_existing_audio_for_text(request.text.strip(), request.language, db)
+        
+        if existing_audio:
+            if isinstance(existing_audio, str):
+                # Single audio file found
+                print(f"   Found existing audio file: {existing_audio}")
+                # Copy the existing file to the new location
+                import shutil
+                source_path = f"/var/www{existing_audio}"
+                if os.path.exists(source_path):
+                    shutil.copy2(source_path, filepath)
+                    print(f"   Copied existing audio file to: {filepath}")
+                else:
+                    print(f"   Existing audio file not found at: {source_path}")
+                    # Fall back to TTS generation
+                    generate_speech(request.text.strip(), filepath, voice_config)
+            elif isinstance(existing_audio, list):
+                # Multiple word audio files found, need to concatenate
+                print(f"   Found {len(existing_audio)} word audio files, concatenating...")
+                # Create a temporary file list for FFmpeg
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                    for audio_path in existing_audio:
+                        full_path = f"/var/www{audio_path}"
+                        if os.path.exists(full_path):
+                            f.write(f"file '{full_path}'\n")
+                        else:
+                            print(f"   Warning: Audio file not found: {full_path}")
+                    temp_file = f.name
+                
+                # Use FFmpeg to concatenate audio files
+                import subprocess
+                try:
+                    cmd = [
+                        'ffmpeg', '-f', 'concat', '-safe', '0', 
+                        '-i', temp_file, '-c', 'copy', filepath, '-y'
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        print(f"   Successfully concatenated audio files to: {filepath}")
+                    else:
+                        print(f"   FFmpeg concatenation failed: {result.stderr}")
+                        # Fall back to TTS generation
+                        generate_speech(request.text.strip(), filepath, voice_config)
+                    
+                    # Clean up temporary file
+                    os.unlink(temp_file)
+                    
+                except Exception as e:
+                    print(f"   Error concatenating audio files: {e}")
+                    # Fall back to TTS generation
+                    generate_speech(request.text.strip(), filepath, voice_config)
+        else:
+            # No existing audio found, generate new speech
+            print(f"   No existing audio found, generating new speech...")
+            generate_speech(request.text.strip(), filepath, voice_config)
         
         # Verify file was created and has content
         if os.path.exists(filepath):

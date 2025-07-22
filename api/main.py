@@ -290,8 +290,37 @@ async def convert_text_to_speech_multi_language(request: MultiLanguageTTSRequest
         voice_name = voice_mapping[request.source_language]
         language_name = supported_languages[request.source_language]
 
+        # Function to convert digits to words for better pronunciation
+        def convert_digits_to_words(text: str) -> str:
+            import re
+            # Replace individual digits with their word equivalents
+            digit_mapping = {
+                '0': 'zero',
+                '1': 'one',
+                '2': 'two',
+                '3': 'three',
+                '4': 'four',
+                '5': 'five',
+                '6': 'six',
+                '7': 'seven',
+                '8': 'eight',
+                '9': 'nine'
+            }
+            
+            # Use regex to find and replace digits while preserving other characters
+            def replace_digit(match):
+                digit = match.group(0)
+                return digit_mapping.get(digit, digit)
+            
+            # Replace digits with words
+            processed_text = re.sub(r'\d', replace_digit, text)
+            return processed_text
+
+        # Process the text to convert digits to words
+        processed_text = convert_digits_to_words(request.text)
+        
         # Configure the text-to-speech request
-        synthesis_input = texttospeech.SynthesisInput(text=request.text)
+        synthesis_input = texttospeech.SynthesisInput(text=processed_text)
 
         # Configure the voice
         voice = texttospeech.VoiceSelectionParams(
@@ -468,6 +497,62 @@ async def generate_isl_video(request: ISLVideoRequest):
     except Exception as e:
         print(f"Unexpected error in ISL video generation: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error during ISL video generation")
+
+@app.get("/api/scan-isl-dataset")
+async def scan_isl_dataset():
+    """
+    Scan the ISL dataset folder and return the list of available videos
+    """
+    try:
+        isl_dataset_dir = "isl_dataset"
+        videos = []
+        
+        if not os.path.exists(isl_dataset_dir):
+            return {
+                "success": False,
+                "message": "ISL dataset directory not found",
+                "videos": []
+            }
+        
+        # Scan the directory structure
+        for category_folder in os.listdir(isl_dataset_dir):
+            category_path = os.path.join(isl_dataset_dir, category_folder)
+            
+            if os.path.isdir(category_path):
+                # Look for video files in the category folder
+                for video_file in os.listdir(category_path):
+                    if video_file.lower().endswith(('.mp4', '.avi', '.mov', '.webm')):
+                        video_path = os.path.join(category_path, video_file)
+                        file_size = os.path.getsize(video_path)
+                        
+                        # Convert file size to human readable format
+                        if file_size < 1024:
+                            size_str = f"{file_size}B"
+                        elif file_size < 1024 * 1024:
+                            size_str = f"{file_size // 1024}KB"
+                        else:
+                            size_str = f"{file_size // (1024 * 1024):.1f}MB"
+                        
+                        videos.append({
+                            "id": f"{category_folder}_{video_file.split('.')[0]}",
+                            "name": video_file.split('.')[0].replace('_', ' ').title(),
+                            "category": category_folder,
+                            "path": f"/isl_videos/{category_folder}/{video_file}",
+                            "size": size_str
+                        })
+        
+        # Sort videos by category and name
+        videos.sort(key=lambda x: (x["category"], x["name"]))
+        
+        return {
+            "success": True,
+            "message": f"Found {len(videos)} videos in ISL dataset",
+            "videos": videos
+        }
+        
+    except Exception as e:
+        print(f"Error scanning ISL dataset: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scan ISL dataset: {str(e)}")
 
 @app.delete("/api/cleanup-file")
 async def cleanup_file(request: CleanupFileRequest):
