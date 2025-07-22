@@ -348,6 +348,14 @@ except Exception as e:
     print(f"⚠️ Could not mount audio files: {e}")
     print("Audio files will be served via individual endpoints")
 
+# Mount static files for ISL videos
+try:
+    app.mount("/isl_videos", StaticFiles(directory="isl_dataset"), name="isl_videos")
+    print("✅ ISL videos mounted at /isl_videos")
+except Exception as e:
+    print(f"⚠️ Could not mount ISL videos: {e}")
+    print("ISL videos will not be available")
+
 # Fallback audio file serving endpoint
 @app.get("/audio_files/{filename}")
 async def serve_audio_file(filename: str):

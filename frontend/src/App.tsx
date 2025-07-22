@@ -7,6 +7,7 @@ import TrainRouteManagement from './components/TrainRouteManagement';
 import AnnouncementTemplates from './components/AnnouncementTemplates';
 import AudioAnnouncementFiles from './components/AudioAnnouncementFiles';
 import AnnouncementAudios from './components/AnnouncementAudios';
+import ISLDictionary from './components/ISLDictionary';
 import ToastContainer, { useToast } from './components/ToastContainer';
 import { User, Station, TrainRoute } from './types';
 import { apiService } from './services/api';
@@ -120,6 +121,8 @@ function AppContent() {
         return <AudioAnnouncementFiles key={audioFilesKey} onDataChange={refreshDashboard} />;
       case 'announcement-audios':
         return <AnnouncementAudios />;
+      case 'isl-dictionary':
+        return <ISLDictionary />;
       default:
         return <Dashboard stationCount={stations.length} routeCount={routes.length} />;
     }
