@@ -107,6 +107,52 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
             align-items: center;
             justify-content: center;
             color: white;
+            position: relative;
+        }}
+        
+        body::before {{
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 100px,
+                rgba(255, 255, 255, 0.05) 100px,
+                rgba(255, 255, 255, 0.05) 200px
+            );
+            z-index: -1;
+            pointer-events: none;
+        }}
+        
+        body::after {{
+            content: "POC DEMO";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 150px,
+                rgba(255, 255, 255, 0.08) 150px,
+                rgba(255, 255, 255, 0.08) 300px
+            );
+            background-size: 300px 300px;
+            background-repeat: repeat;
+            z-index: -1;
+            pointer-events: none;
+            font-size: 2em;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }}
         
         .container {{
@@ -172,25 +218,22 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
             font-size: 2.5em;
             font-weight: bold;
             white-space: nowrap;
-            animation: scroll-left 40s linear infinite;
+            animation: scroll-left 60s linear infinite;
             margin: 10px 0;
             line-height: 1.2;
             display: inline-block;
             min-width: 100%;
             animation-play-state: running;
+            animation-delay: 0s;
         }}
         
         .marquee.paused {{
             animation-play-state: paused;
         }}
         
-        .language-label {{
-            font-size: 1.2em;
+        .marquee .separator {{
+            color: #ff0000;
             font-weight: bold;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.9;
         }}
         
         @keyframes scroll-left {{
@@ -245,30 +288,8 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
         </div>
         
         <div class="marquee-container">
-            <div class="language-label">English</div>
             <div class="marquee">
-                {request.announcement_texts.get('english', '')} | {request.announcement_texts.get('english', '')}
-            </div>
-        </div>
-        
-        <div class="marquee-container">
-            <div class="language-label">हिंदी</div>
-            <div class="marquee">
-                {request.announcement_texts.get('hindi', '')} | {request.announcement_texts.get('hindi', '')}
-            </div>
-        </div>
-        
-        <div class="marquee-container">
-            <div class="language-label">मराठी</div>
-            <div class="marquee">
-                {request.announcement_texts.get('marathi', '')} | {request.announcement_texts.get('marathi', '')}
-            </div>
-        </div>
-        
-        <div class="marquee-container">
-            <div class="language-label">ગુજરાતી</div>
-            <div class="marquee">
-                {request.announcement_texts.get('gujarati', '')} | {request.announcement_texts.get('gujarati', '')}
+                {request.announcement_texts.get('english', '')} <span class="separator">|</span> {request.announcement_texts.get('hindi', '')} <span class="separator">|</span> {request.announcement_texts.get('marathi', '')} <span class="separator">|</span> {request.announcement_texts.get('gujarati', '')} <span class="separator">|</span> {request.announcement_texts.get('english', '')} <span class="separator">|</span> {request.announcement_texts.get('hindi', '')} <span class="separator">|</span> {request.announcement_texts.get('marathi', '')} <span class="separator">|</span> {request.announcement_texts.get('gujarati', '')}
             </div>
         </div>
         
@@ -285,6 +306,18 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
     
     <script>
         const audio = document.getElementById('announcementAudio');
+        
+        // Force marquee to start immediately
+        document.addEventListener('DOMContentLoaded', function() {{
+            const marquee = document.querySelector('.marquee');
+            if (marquee) {{
+                // Force animation restart
+                marquee.style.animation = 'none';
+                marquee.offsetHeight; // Trigger reflow
+                marquee.style.animation = 'scroll-left 60s linear infinite';
+                console.log('Marquee animation started immediately');
+            }}
+        }});
         
         // Start marquee immediately when page loads
         window.addEventListener('load', function() {{
