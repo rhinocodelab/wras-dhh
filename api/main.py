@@ -15,6 +15,7 @@ from routes import templates
 from routes import audio_files
 from routes import announcement_audio
 from routes import final_announcement
+from routes import publish_isl
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -374,6 +375,7 @@ app.include_router(announcement_audio.router, prefix="/api", tags=["announcement
 
 # Include final announcement routes
 app.include_router(final_announcement.router, prefix="/api", tags=["final-announcement"])
+app.include_router(publish_isl.router, prefix="/api", tags=["publish-isl"])
 
 @app.post("/generate-isl-video")
 async def generate_isl_video(request: ISLVideoRequest):
@@ -573,6 +575,10 @@ async def cleanup_file(request: CleanupFileRequest):
             # ISL video file in /var/www/final_isl_vid/
             full_path = f"/var/www{file_path}"
             print(f"🎬 ISL video file detected, full path: {full_path}")
+        elif file_path.startswith('/publish_isl/'):
+            # Published HTML file in /var/www/publish_isl/
+            full_path = f"/var/www{file_path}"
+            print(f"📄 Published HTML file detected, full path: {full_path}")
         else:
             # Assume it's a relative path or direct path
             full_path = file_path
@@ -603,6 +609,72 @@ async def cleanup_file(request: CleanupFileRequest):
         print(f"Error deleting file {request.file_path}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
+@app.delete("/api/cleanup-publish-isl")
+async def cleanup_publish_isl_directory():
+    """
+    Clean up all files in the /var/www/publish_isl directory
+    """
+    try:
+        publish_isl_dir = "/var/www/publish_isl"
+        print(f"🧹 Starting cleanup of publish_isl directory: {publish_isl_dir}")
+        
+        # Check if directory exists
+        if not os.path.exists(publish_isl_dir):
+            print(f"⚠️ Directory does not exist: {publish_isl_dir}")
+            return {
+                "success": True,
+                "message": "Directory does not exist, nothing to clean up",
+                "files_deleted": 0
+            }
+        
+        # Get all files in the directory
+        files_to_delete = []
+        for filename in os.listdir(publish_isl_dir):
+            file_path = os.path.join(publish_isl_dir, filename)
+            if os.path.isfile(file_path):
+                files_to_delete.append(file_path)
+        
+        if not files_to_delete:
+            print(f"📁 No files found in {publish_isl_dir}")
+            return {
+                "success": True,
+                "message": "No files found to clean up",
+                "files_deleted": 0
+            }
+        
+        # Delete all files
+        deleted_count = 0
+        for file_path in files_to_delete:
+            try:
+                os.remove(file_path)
+                deleted_count += 1
+                print(f"🗑️ Deleted file: {os.path.basename(file_path)}")
+            except PermissionError as e:
+                print(f"❌ Permission error deleting {os.path.basename(file_path)}: {e}")
+                # Try to fix permissions and retry
+                try:
+                    import stat
+                    os.chmod(file_path, stat.S_IWRITE)
+                    os.remove(file_path)
+                    deleted_count += 1
+                    print(f"🗑️ Deleted file after fixing permissions: {os.path.basename(file_path)}")
+                except Exception as retry_e:
+                    print(f"❌ Failed to delete {os.path.basename(file_path)} even after fixing permissions: {retry_e}")
+            except Exception as e:
+                print(f"❌ Error deleting {os.path.basename(file_path)}: {e}")
+        
+        print(f"✅ Cleanup completed. Deleted {deleted_count} files from {publish_isl_dir}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully cleaned up {deleted_count} files from publish_isl directory",
+            "files_deleted": deleted_count
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during publish_isl cleanup: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clean up publish_isl directory: {str(e)}")
+
 # Mount static files for audio serving
 try:
     app.mount("/audio_files", StaticFiles(directory="/var/www/audio_files"), name="audio_files")
@@ -626,6 +698,24 @@ try:
 except Exception as e:
     print(f"⚠️ Could not mount final ISL videos: {e}")
     print("Final ISL videos will not be available")
+
+# Mount static files for published ISL announcements
+publish_isl_mounted = False
+possible_publish_dirs = ["/var/www/publish_isl", "./publish_isl", "/tmp/publish_isl"]
+
+for publish_dir in possible_publish_dirs:
+    try:
+        if os.path.exists(publish_dir):
+            app.mount("/publish_isl", StaticFiles(directory=publish_dir), name="publish_isl")
+            print(f"✅ Published ISL announcements mounted at /publish_isl from {publish_dir}")
+            publish_isl_mounted = True
+            break
+    except Exception as e:
+        print(f"⚠️ Could not mount published ISL announcements from {publish_dir}: {e}")
+        continue
+
+if not publish_isl_mounted:
+    print("❌ No publish directory could be mounted. Published ISL announcements will not be available")
 
 # Fallback audio file serving endpoint
 @app.get("/audio_files/{filename}")

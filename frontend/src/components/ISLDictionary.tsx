@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Pause, Volume2, Search, Hand, X, RefreshCw } from 'lucide-react';
 import { useToast } from './ToastContainer';
+import { apiService } from '../services/api';
 
 interface ISLVideo {
   id: string;
@@ -23,6 +24,28 @@ export default function ISLDictionary() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(7);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const cleanupFiles = async () => {
+    try {
+      await apiService.cleanupFiles();
+      console.log('Cleanup completed successfully');
+      
+      // Also cleanup publish ISL directory
+      try {
+        await apiService.cleanupPublishISL();
+        console.log('Publish ISL cleanup completed successfully');
+      } catch (error: any) {
+        console.warn('Publish ISL cleanup failed:', error);
+      }
+    } catch (error: any) {
+      console.error('Cleanup failed:', error);
+      addToast({
+        type: 'error',
+        title: 'Cleanup Failed',
+        message: error.message || 'Failed to cleanup temporary files'
+      });
+    }
+  };
 
   const categories = [
     { id: 'all', name: 'All Categories' },
@@ -63,6 +86,18 @@ export default function ISLDictionary() {
 
   useEffect(() => {
     fetchISLVideos();
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      cleanupFiles();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   useEffect(() => {
@@ -211,16 +246,13 @@ export default function ISLDictionary() {
               <table className="w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">
                 Video Details
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                 Category
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
                 Size
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">
@@ -245,9 +277,6 @@ export default function ISLDictionary() {
                   <span className={`px-2 py-1 text-xs font-medium rounded-none ${getCategoryColor(video.category)}`}>
                     {getCategoryDisplayName(video.category)}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {video.id}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {video.size}
@@ -340,6 +369,7 @@ export default function ISLDictionary() {
                   src={currentVideoPath}
                   controls
                   autoPlay
+                  muted
                   className="w-full max-w-lg"
                   onEnded={handleStopVideo}
                   onError={() => {

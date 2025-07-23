@@ -1,4 +1,4 @@
-import { MAIN_API_BASE_URL } from '../config/api';
+import { MAIN_API_BASE_URL, TRANSLATION_API_BASE_URL } from '../config/api';
 
 const API_BASE_URL = MAIN_API_BASE_URL;
 
@@ -268,6 +268,67 @@ class ApiService {
       const response = await fetch(`${API_BASE_URL}/train-routes`, {
         method: 'DELETE',
         headers: this.getAuthHeaders(),
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  }
+
+  async cleanupFiles() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cleanup-file`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  }
+
+  async cleanupPublishISL() {
+    try {
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/cleanup-publish-isl`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+      return await this.handleResponse(response);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  }
+
+  async publishISLAnnouncement(data: {
+    train_number: string;
+    train_name: string;
+    start_station_name: string;
+    end_station_name: string;
+    platform_number: number;
+    announcement_texts: {
+      english: string;
+      hindi: string;
+      marathi: string;
+      gujarati: string;
+    };
+    isl_video_path: string;
+    merged_audio_path: string;
+    category: string;
+  }) {
+    try {
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/publish-isl-announcement`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(data),
       });
       return await this.handleResponse(response);
     } catch (error) {
