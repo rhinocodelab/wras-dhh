@@ -110,48 +110,24 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
             position: relative;
         }}
         
-        body::before {{
-            content: "";
+        .watermark {{
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: repeating-linear-gradient(
-                45deg,
-                transparent,
-                transparent 100px,
-                rgba(255, 255, 255, 0.05) 100px,
-                rgba(255, 255, 255, 0.05) 200px
-            );
             z-index: -1;
             pointer-events: none;
+            overflow: hidden;
         }}
         
-        body::after {{
-            content: "POC DEMO";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: repeating-linear-gradient(
-                45deg,
-                transparent,
-                transparent 150px,
-                rgba(255, 255, 255, 0.08) 150px,
-                rgba(255, 255, 255, 0.08) 300px
-            );
-            background-size: 300px 300px;
-            background-repeat: repeat;
-            z-index: -1;
-            pointer-events: none;
-            font-size: 2em;
+        .watermark-text {{
+            position: absolute;
+            font-size: 3em;
             font-weight: bold;
-            color: rgba(255, 255, 255, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            color: rgba(255, 255, 255, 0.08);
+            transform: rotate(-45deg);
+            white-space: nowrap;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }}
         
@@ -267,6 +243,22 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
     </style>
 </head>
 <body>
+    <div class="watermark">
+        <div class="watermark-text" style="top: 10%; left: 5%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 30%; left: 25%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 50%; left: 45%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 70%; left: 65%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 90%; left: 85%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 20%; left: 15%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 40%; left: 35%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 60%; left: 55%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 80%; left: 75%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 10%; left: 95%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 30%; left: 85%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 50%; left: 75%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 70%; left: 65%;">POC DEMO</div>
+        <div class="watermark-text" style="top: 90%; left: 55%;">POC DEMO</div>
+    </div>
     <div class="container">
         <div class="header">
             <div class="train-info">
