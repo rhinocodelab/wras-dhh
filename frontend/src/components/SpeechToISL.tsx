@@ -248,37 +248,62 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
     }
   };
 
+  const [resultData, setResultData] = useState<{
+    videoUrl: string;
+    audioUrl: string;
+    success: boolean;
+    message: string;
+  } | null>(null);
+
   const generateISLVideo = async (text: string) => {
     try {
-      // TODO: Replace with actual API endpoint
-      const response = await fetch('/api/generate-isl-video', {
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/speech-to-isl`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          announcement_text: text,
+          spoken_text: convertedText,
+          english_text: englishText || convertedText, // Use English text or fallback to spoken text
           language: selectedLanguage
         })
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        setVideoUrl(result.video_url);
-        addToast({
-          type: 'success',
-          title: 'ISL Video Generated',
-          message: 'Video created successfully'
-        });
-      } else {
-        throw new Error('Failed to generate ISL video');
-      }
-    } catch (error) {
+              if (response.ok) {
+          const result = await response.json();
+          console.log('Speech-to-ISL result:', result);
+          
+          if (result.success) {
+            setResultData({
+              videoUrl: result.video_url,
+              audioUrl: result.audio_url,
+              success: true,
+              message: result.message
+            });
+            
+            // Update video URL for the player
+            if (result.video_url) {
+              setVideoUrl(result.video_url);
+            }
+            
+            addToast({
+              type: 'success',
+              title: 'ISL Video Generated',
+              message: 'Video and audio created successfully'
+            });
+          } else {
+            throw new Error(result.message || 'Failed to generate ISL video');
+          }
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to generate ISL video');
+        }
+    } catch (error: any) {
       console.error('Error generating ISL video:', error);
       addToast({
         type: 'error',
         title: 'Video Generation Failed',
-        message: 'Failed to generate ISL video'
+        message: error.message || 'Failed to generate ISL video'
       });
     }
   };
@@ -421,21 +446,19 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">ISL Video Player</h3>
-              {videoUrl && (
-                <button
-                  onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = videoUrl;
-                    link.download = 'isl-video.mp4';
-                    link.click();
-                  }}
-                  className="flex items-center space-x-2 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Download</span>
-                </button>
-              )}
             </div>
+
+            {/* Success Message */}
+            {resultData && resultData.success && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-green-800 font-medium">{resultData.message}</span>
+                </div>
+              </div>
+            )}
 
             <div className="bg-gray-900 rounded-lg overflow-hidden aspect-video">
               {videoUrl ? (
@@ -443,6 +466,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                   className="w-full h-full object-contain"
                   controls
                   autoPlay
+                  muted
                   onPlay={() => setIsVideoPlaying(true)}
                   onPause={() => setIsVideoPlaying(false)}
                   onEnded={() => setIsVideoPlaying(false)}
@@ -469,14 +493,31 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
               </div>
             )}
 
+            {/* Audio Player */}
+            {resultData && resultData.audioUrl && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-900 mb-2">Announcement Audio</h4>
+                <div className="bg-gray-100 rounded-lg p-4">
+                  <audio
+                    className="w-full"
+                    controls
+                    autoPlay
+                  >
+                    <source src={resultData.audioUrl} type="audio/wav" />
+                    Your browser does not support the audio tag.
+                  </audio>
+                </div>
+              </div>
+            )}
+
             {/* Generate ISL Video Button */}
-            {(convertedText || englishText) && (
+            {englishText && (
               <div className="flex justify-center">
-                <button
-                  onClick={() => generateISLVideo(englishText || convertedText)}
-                  disabled={!englishText && !convertedText}
-                  className="flex items-center space-x-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                                  <button
+                    onClick={() => generateISLVideo(englishText || convertedText)}
+                    disabled={!englishText}
+                    className="flex items-center space-x-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                   <Play className="h-5 w-5" />
                   <span>Generate ISL Video</span>
                 </button>
@@ -485,6 +526,8 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
           </div>
         </div>
       </div>
+
+
     </div>
   );
 } 
