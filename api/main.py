@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -8,6 +8,8 @@ import os
 import io
 from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
+from google.cloud import speech_v1p1beta1 as speech
+from google.protobuf import wrappers_pb2
 from google.oauth2 import service_account
 from config import Config
 from database import create_tables
@@ -64,6 +66,7 @@ if not os.path.exists(credentials_path):
 credentials = service_account.Credentials.from_service_account_file(credentials_path)
 translate_client = translate.Client(credentials=credentials)
 tts_client = texttospeech.TextToSpeechClient(credentials=credentials)
+speech_client = speech.SpeechClient(credentials=credentials)
 
 # Pydantic models
 class TranslationRequest(BaseModel):
@@ -96,6 +99,15 @@ class ISLVideoRequest(BaseModel):
 
 class CleanupFileRequest(BaseModel):
     file_path: str
+
+# Note: SpeechToTextRequest will be handled with Form data for file upload
+
+class SpeechToTextResponse(BaseModel):
+    spoken_text: str
+    english_text: str
+    language: str
+    success: bool
+    message: str = "Speech-to-text completed successfully"
 
 @app.get("/")
 async def root():
@@ -575,6 +587,113 @@ async def scan_isl_dataset():
     except Exception as e:
         print(f"Error scanning ISL dataset: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to scan ISL dataset: {str(e)}")
+
+@app.post("/api/speech-to-text", response_model=SpeechToTextResponse)
+async def speech_to_text(
+    audio: UploadFile = File(...),
+    language: str = Form(...)
+):
+    """
+    Convert speech to text using Google Cloud Speech-to-Text API with Indian language models
+    """
+    try:
+        
+        # Map language to Google Cloud Speech-to-Text language codes
+        language_mapping = {
+            "english": "en-IN",
+            "hindi": "hi-IN", 
+            "marathi": "mr-IN",
+            "gujarati": "gu-IN"
+        }
+        
+        if language not in language_mapping:
+            raise HTTPException(status_code=400, detail=f"Unsupported language: {language}")
+        
+        # Read audio file
+        audio_content = await audio.read()
+        
+        # Determine encoding based on file type
+        encoding = speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        if audio.filename and audio.filename.endswith('.wav'):
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+        elif audio.filename and audio.filename.endswith('.mp3'):
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        elif audio.filename and audio.filename.endswith('.webm'):
+            encoding = speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        elif audio.filename and audio.filename.endswith('.mp4'):
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        
+        print(f"Audio filename: {audio.filename}")
+        print(f"Using encoding: {encoding}")
+        print(f"Audio content size: {len(audio_content)} bytes")
+        
+        # Configure the speech recognition request
+        recognition_audio = speech.RecognitionAudio(content=audio_content)
+        
+        config = speech.RecognitionConfig(
+            encoding=encoding,
+            sample_rate_hertz=48000,  # Match the frontend sample rate
+            language_code=language_mapping[language],
+            enable_automatic_punctuation=True,
+            enable_spoken_punctuation=wrappers_pb2.BoolValue(value=True),
+            model="latest_long",
+            use_enhanced=True
+        )
+        
+        # Perform speech recognition
+        try:
+            response = speech_client.recognize(config=config, audio=recognition_audio)
+            
+            print(f"Speech recognition response: {response}")
+            print(f"Number of results: {len(response.results)}")
+            
+            if not response.results:
+                return SpeechToTextResponse(
+                    spoken_text="",
+                    english_text="",
+                    language=language,
+                    success=False,
+                    message="No speech detected in the audio"
+                )
+        except Exception as e:
+            print(f"Speech recognition error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Speech recognition failed: {str(e)}")
+        
+        # Extract the transcribed text
+        spoken_text = ""
+        for result in response.results:
+            if result.alternatives:
+                spoken_text += result.alternatives[0].transcript + " "
+        
+        spoken_text = spoken_text.strip()
+        
+        # Translate to English if the spoken language is not English
+        english_text = spoken_text
+        if language != "english":
+            try:
+                # Use Google Translate to convert to English
+                translation_result = translate_client.translate(
+                    spoken_text,
+                    target_language="en",
+                    source_language=language_mapping[language].split("-")[0]
+                )
+                english_text = translation_result["translatedText"]
+            except Exception as e:
+                print(f"Translation error: {e}")
+                # If translation fails, use the spoken text as English text
+                english_text = spoken_text
+        
+        return SpeechToTextResponse(
+            spoken_text=spoken_text,
+            english_text=english_text,
+            language=language,
+            success=True,
+            message="Speech-to-text completed successfully"
+        )
+        
+    except Exception as e:
+        print(f"❌ Error in speech-to-text: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Speech-to-text failed: {str(e)}")
 
 @app.delete("/api/cleanup-file")
 async def cleanup_file(request: CleanupFileRequest):
