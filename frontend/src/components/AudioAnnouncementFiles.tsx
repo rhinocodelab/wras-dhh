@@ -46,17 +46,31 @@ const AudioAnnouncementFiles: React.FC<AudioAnnouncementFilesProps> = ({ onDataC
 
   const loadAudioFiles = async () => {
     try {
+      console.log('Loading audio files from:', API_ENDPOINTS.audioFiles.list);
       const response = await fetch(API_ENDPOINTS.audioFiles.list);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
       if (response.ok) {
         const files = await response.json();
+        console.log('Loaded audio files:', files.length);
         setAudioFiles(files);
+      } else {
+        console.error('HTTP error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        addToast({
+          type: 'error',
+          title: 'Error',
+          message: `Failed to load audio files: ${response.status} ${response.statusText}`
+        });
       }
     } catch (error) {
       console.error('Error loading audio files:', error);
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'Failed to load audio files'
+        message: `Failed to load audio files: ${error instanceof Error ? error.message : 'Network error'}`
       });
     }
   };

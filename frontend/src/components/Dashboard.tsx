@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Train, MapPin, Route, Users, Search, X, Volume2, Square } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContainer';
+import { API_ENDPOINTS, TRANSLATION_API_BASE_URL, MAIN_API_BASE_URL } from '../config/api';
 
 interface DashboardProps {
   stationCount: number;
@@ -92,7 +93,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   useEffect(() => {
     const loadAvailableTemplates = async () => {
       try {
-        const response = await fetch('http://localhost:5001/api/final-announcement/available-templates');
+        const response = await fetch(API_ENDPOINTS.finalAnnouncement.availableTemplates);
         if (response.ok) {
           const data = await response.json();
           const templateMap: { [key: string]: number } = {};
@@ -113,7 +114,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
   const loadAllTrainRoutes = async () => {
     try {
       setIsLoadingTrains(true);
-      const response = await fetch('http://localhost:3001/api/train-routes/all', {
+      const response = await fetch(`${MAIN_API_BASE_URL}/train-routes/all`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -130,11 +131,6 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       }
     } catch (error) {
       console.error('Error loading train routes:', error);
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to load train routes'
-      });
     } finally {
       setIsLoadingTrains(false);
     }
@@ -172,11 +168,6 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
     setHasSearched(true); // Ensure results are shown
     setSelectedTrains(new Set());
     setShowPickTrainModal(false);
-    addToast({
-      type: 'success',
-      title: 'Trains Added',
-      message: `${selectedTrainData.length} train(s) added to search results`
-    });
   };
 
   const stats = [
@@ -200,11 +191,6 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) {
-      addToast({
-        type: 'warning',
-        title: 'Search Required',
-        message: 'Please enter a train number or train name to search'
-      });
       return;
     }
 
@@ -214,27 +200,8 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
     try {
       const response = await apiService.getTrainRoutes(1, 1000, searchTerm.trim());
       setSearchResults(response.routes || []);
-      
-      if (response.routes.length === 0) {
-        addToast({
-          type: 'info',
-          title: 'No Results Found',
-          message: `No train routes found matching "${searchTerm}"`
-        });
-      } else {
-        addToast({
-          type: 'success',
-          title: 'Search Results',
-          message: `Found ${response.routes.length} train route(s) matching "${searchTerm}"`
-        });
-      }
     } catch (error: any) {
       console.error('Search error:', error);
-      addToast({
-        type: 'error',
-        title: 'Search Failed',
-        message: error.message || 'Failed to search train routes'
-      });
       setSearchResults([]);
     } finally {
       setIsSearching(false);
@@ -316,7 +283,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       setProgressMessage('Loading announcement template...');
       
       // Fetch template for the category
-      const templateResponse = await fetch(`http://localhost:5001/api/templates?category=${category}`);
+              const templateResponse = await fetch(`${API_ENDPOINTS.templates.list}?category=${category}`);
       if (templateResponse.ok) {
         const templates = await templateResponse.json();
         if (!templates || templates.length === 0) {
@@ -376,12 +343,15 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         // Generate announcement texts for all languages
         const texts = {
           english: replacePlaceholders(template.english_text || '', 'english'),
-          hindi: replacePlaceholders(template.hindi_text || '', 'hindi'),
-          marathi: replacePlaceholders(template.marathi_text || '', 'marathi'),
-          gujarati: replacePlaceholders(template.gujarati_text || '', 'gujarati')
+          hindi: replacePlaceholders(template.hindi_text || template.english_text || '', 'hindi'),
+          marathi: replacePlaceholders(template.marathi_text || template.english_text || '', 'marathi'),
+          gujarati: replacePlaceholders(template.gujarati_text || template.english_text || '', 'gujarati')
         };
         
         setAnnouncementTexts(texts);
+        
+        // Debug: Log the announcement texts
+        console.log('📝 Generated announcement texts:', texts);
         
         // Generate ISL video from English announcement text
         setProgressMessage('Generating ISL video...');
@@ -402,7 +372,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         };
 
         // Generate final announcement using template segments
-        const finalAnnouncementResponse = await fetch('http://localhost:5001/api/final-announcement/generate', {
+        const finalAnnouncementResponse = await fetch(API_ENDPOINTS.finalAnnouncement.generate, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -426,7 +396,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
             setProgressMessage(`Processing audio files... (${attempts + 1}/${maxAttempts})`);
             
             try {
-              const progressResponse = await fetch(`http://localhost:5001/api/final-announcement/progress/${generationKey}`);
+              const progressResponse = await fetch(API_ENDPOINTS.finalAnnouncement.progress(generationKey));
               if (progressResponse.ok) {
                 progress = await progressResponse.json();
                 
@@ -544,7 +514,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         currentAudio.currentTime = 0;
       }
       
-      const audio = new Audio(`http://localhost:5001${mergedAudioPath}`);
+              const audio = new Audio(`${TRANSLATION_API_BASE_URL}${mergedAudioPath}`);
       setCurrentAudio(audio);
       audio.play();
     }
@@ -594,7 +564,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       for (const filePath of filesToDelete) {
         try {
           console.log(`🗑️ Attempting to delete: ${filePath}`);
-          const response = await fetch('http://localhost:5001/api/cleanup-file', {
+          const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/cleanup-file/`, {
             method: 'DELETE',
             headers: {
               'Content-Type': 'application/json',
@@ -641,7 +611,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       setIsGeneratingISLVideo(true);
       setIslVideoStatus('Generating ISL Video...');
       
-      const response = await fetch('http://localhost:5001/generate-isl-video', {
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/generate-isl-video/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -713,6 +683,10 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         merged_audio_path: mergedAudioPath,
         category: category
       };
+      
+      // Debug: Log the publish data
+      console.log('📤 Publishing ISL announcement with data:', publishData);
+      console.log('📝 Announcement texts being sent:', announcementTexts);
 
       const response = await apiService.publishISLAnnouncement(publishData);
       
@@ -724,7 +698,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
         });
 
         // Open the generated HTML page in a new tab
-        const htmlUrl = `http://localhost:5001${response.url}`;
+        const htmlUrl = `${TRANSLATION_API_BASE_URL}${response.url}`;
         window.open(htmlUrl, '_blank');
       } else {
         throw new Error(response.message || 'Failed to publish ISL announcement');
@@ -762,7 +736,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
       };
 
       // Generate final announcement using template segments
-      const response = await fetch('http://localhost:5001/api/final-announcement/generate', {
+              const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/final-announcement/generate/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1143,7 +1117,7 @@ export default function Dashboard({ stationCount, routeCount }: DashboardProps) 
                     {islVideoPath ? (
                       <div className="aspect-video bg-black rounded-none flex items-center justify-center">
                         <video
-                          src={`http://localhost:5001${islVideoPath}`}
+                          src={`${TRANSLATION_API_BASE_URL}${islVideoPath}`}
                           muted
                           className="w-full h-full object-contain"
                           onError={() => {

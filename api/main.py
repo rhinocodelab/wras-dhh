@@ -27,10 +27,30 @@ app = FastAPI(
 # Configure CORS to allow requests from frontend and backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,  # Set to False when using allow_origins=["*"]
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_origins=[
+        "http://localhost:5173",  # Frontend development server
+        "http://localhost:3000",  # Frontend production server
+        "http://localhost:3001",  # Backend server
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://192.168.1.92:5173",  # Network IP for development
+        "http://192.168.1.92:3000",  # Network IP for production
+        "http://192.168.1.92:3001",  # Network IP for backend
+    ],
+    allow_credentials=True,  # Allow credentials for authenticated requests
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Content-Type", 
+        "Authorization", 
+        "Accept", 
+        "Origin", 
+        "X-Requested-With",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers"
+    ],
+    expose_headers=["Content-Disposition", "Content-Length"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # Initialize database

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Copy, Check, Globe, Languages, Save, Plus, Edit2, Trash2, Volume2, Play, Pause } from 'lucide-react';
 import { useToast } from './ToastContainer';
-import { API_ENDPOINTS } from '../config/api';
+import { API_ENDPOINTS, TRANSLATION_API_BASE_URL } from '../config/api';
 
 interface AnnouncementTemplate {
   id: string;
@@ -306,7 +306,7 @@ export default function AnnouncementTemplates() {
       }
 
       const audioResults: AudioResults = {};
-      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+      const fastApiUrl = `${TRANSLATION_API_BASE_URL}/text-to-speech-multi-language/`;
 
       // Generate audio for each language
       for (const [langCode, text] of Object.entries(textInLanguages)) {
@@ -752,7 +752,7 @@ export default function AnnouncementTemplates() {
 
         try {
           // Call the announcement-audio API to create segments
-          const announcementResponse = await fetch('http://localhost:5001/api/announcement-audio/generate', {
+          const announcementResponse = await fetch(`${TRANSLATION_API_BASE_URL}/api/announcement-audio/generate/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -797,7 +797,7 @@ export default function AnnouncementTemplates() {
             }));
 
             try {
-              const response = await fetch('http://localhost:5001/text-to-speech-multi-language', {
+              const response = await fetch(`${TRANSLATION_API_BASE_URL}/text-to-speech-multi-language/`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -928,7 +928,7 @@ export default function AnnouncementTemplates() {
       console.log('Generating audio segments for template:', template.title);
 
       // Call the announcement-audio API to create segments for Announcement Segments page
-      const announcementResponse = await fetch('http://localhost:5001/api/announcement-audio/generate', {
+              const announcementResponse = await fetch(`${TRANSLATION_API_BASE_URL}/api/announcement-audio/generate/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -989,7 +989,7 @@ export default function AnnouncementTemplates() {
       }
 
       const audioResults: AudioResults = {};
-      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+      const fastApiUrl = `${TRANSLATION_API_BASE_URL}/text-to-speech-multi-language/`;
 
       // Generate audio for each language
       for (const [langCode, text] of Object.entries(templateTexts)) {

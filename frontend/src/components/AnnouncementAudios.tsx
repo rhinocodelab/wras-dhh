@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, Search, Play, Download, Trash2, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { useToast } from './ToastContainer';
+import { TRANSLATION_API_BASE_URL, API_ENDPOINTS } from '../config/api';
 
 interface AudioFile {
   id: number;
@@ -92,7 +93,7 @@ export default function AnnouncementAudios() {
   const fetchAudioFiles = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:5001/api/audio-files');
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/audio-files/`);
       if (response.ok) {
         const data = await response.json();
         setAudioFiles(data.audio_files || []);
@@ -113,7 +114,7 @@ export default function AnnouncementAudios() {
 
   const fetchAnnouncementSegments = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/announcement-audio/all-segments');
+      const response = await fetch(API_ENDPOINTS.announcementAudio.allSegments);
       if (response.ok) {
         const data = await response.json();
         setAnnouncementSegments(data.segments || []);
@@ -135,7 +136,7 @@ export default function AnnouncementAudios() {
       setIsRefreshingFinal(true);
       // Add cache-busting parameter to prevent browser caching
       const timestamp = new Date().getTime();
-      const response = await fetch(`http://localhost:5001/api/final-announcement/list?_t=${timestamp}`, {
+      const response = await fetch(`${API_ENDPOINTS.finalAnnouncement.list}?_t=${timestamp}`, {
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -177,7 +178,7 @@ export default function AnnouncementAudios() {
   const checkForNewAnnouncements = async () => {
     try {
       const timestamp = new Date().getTime();
-      const response = await fetch(`http://localhost:5001/api/final-announcement/list?_t=${timestamp}`, {
+      const response = await fetch(`${API_ENDPOINTS.finalAnnouncement.list}?_t=${timestamp}`, {
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
@@ -213,7 +214,7 @@ export default function AnnouncementAudios() {
       return;
     }
 
-    const audioUrl = `http://localhost:5001${audioPath}`;
+    const audioUrl = `${TRANSLATION_API_BASE_URL}${audioPath}`;
     const audio = new Audio(audioUrl);
     audio.play().catch(error => {
       console.error('Error playing audio:', error);
@@ -235,7 +236,7 @@ export default function AnnouncementAudios() {
       return;
     }
 
-    const audioUrl = `http://localhost:5001${audioPath}`;
+    const audioUrl = `${TRANSLATION_API_BASE_URL}${audioPath}`;
     const link = document.createElement('a');
     link.href = audioUrl;
     link.download = `${text.replace(/[^a-zA-Z0-9]/g, '_')}_${language}.mp3`;
@@ -256,7 +257,7 @@ export default function AnnouncementAudios() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5001/api/audio-files/${audioId}`, {
+      const response = await fetch(API_ENDPOINTS.audioFiles.delete(audioId), {
         method: 'DELETE',
       });
 
@@ -286,7 +287,7 @@ export default function AnnouncementAudios() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5001/api/announcement-audio/segments/${segmentId}`, {
+      const response = await fetch(API_ENDPOINTS.announcementAudio.deleteSegment(segmentId), {
         method: 'DELETE',
       });
 
@@ -317,7 +318,7 @@ export default function AnnouncementAudios() {
 
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:5001/api/final-announcement/clear-all', {
+      const response = await fetch(API_ENDPOINTS.finalAnnouncement.clearAll, {
         method: 'DELETE',
       });
       
@@ -356,7 +357,7 @@ export default function AnnouncementAudios() {
 
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:5001/api/final-announcement/clear-dynamic-content', {
+      const response = await fetch(API_ENDPOINTS.finalAnnouncement.clearDynamicContent, {
         method: 'DELETE',
       });
       
@@ -394,7 +395,7 @@ export default function AnnouncementAudios() {
 
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:5001/api/announcement-audio/clear-all-segments', {
+      const response = await fetch(API_ENDPOINTS.announcementAudio.clearAllSegments, {
         method: 'DELETE',
       });
 

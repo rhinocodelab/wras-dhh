@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Pause, Volume2, Search, Hand, X, RefreshCw } from 'lucide-react';
 import { useToast } from './ToastContainer';
 import { apiService } from '../services/api';
+import { TRANSLATION_API_BASE_URL } from '../config/api';
 
 interface ISLVideo {
   id: string;
@@ -57,7 +58,7 @@ export default function ISLDictionary() {
   const fetchISLVideos = async () => {
     try {
       setIsRefreshing(true);
-      const response = await fetch('http://localhost:5001/api/scan-isl-dataset');
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/scan-isl-dataset/`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch ISL videos');
@@ -120,7 +121,7 @@ export default function ISLDictionary() {
   }, [searchTerm, selectedCategory, videos]);
 
   const handlePlayVideo = (videoId: string, videoPath: string) => {
-    setCurrentVideoPath(`http://localhost:5001${videoPath}`);
+          setCurrentVideoPath(`${TRANSLATION_API_BASE_URL}${videoPath}`);
     setCurrentPlayingVideo(videoId);
     setShowVideoModal(true);
   };

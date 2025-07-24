@@ -1,10 +1,10 @@
 // API Configuration for different services
 
 // Main backend API (Node.js)
-export const MAIN_API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api';
+export const MAIN_API_BASE_URL = import.meta.env.DEV ? '/api' : '/api';
 
 // Translation API (FastAPI)
-export const TRANSLATION_API_BASE_URL = 'http://localhost:5001';
+export const TRANSLATION_API_BASE_URL = import.meta.env.DEV ? '/translation-api' : 'http://localhost:5001';
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -37,35 +37,53 @@ export const API_ENDPOINTS = {
   
   // Template API endpoints
   templates: {
-    list: `${TRANSLATION_API_BASE_URL}/api/templates`,
-    create: `${TRANSLATION_API_BASE_URL}/api/templates`,
-    checkDuplicate: `${TRANSLATION_API_BASE_URL}/api/templates/check-duplicate`,
-    update: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}`,
-    delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}`,
-    getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}`,
-    categories: `${TRANSLATION_API_BASE_URL}/api/templates/categories/list`,
+    list: `${TRANSLATION_API_BASE_URL}/api/templates/`,
+    create: `${TRANSLATION_API_BASE_URL}/api/templates/`,
+    checkDuplicate: `${TRANSLATION_API_BASE_URL}/api/templates/check-duplicate/`,
+    update: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}/`,
+    delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}/`,
+    getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}/`,
+    categories: `${TRANSLATION_API_BASE_URL}/api/templates/categories/list/`,
   },
   
   // Audio Files API endpoints
   audioFiles: {
-    list: `${TRANSLATION_API_BASE_URL}/api/audio-files`,
-    create: `${TRANSLATION_API_BASE_URL}/api/audio-files`,
+    list: `${TRANSLATION_API_BASE_URL}/api/audio-files/`,
+    create: `${TRANSLATION_API_BASE_URL}/api/audio-files/`,
     checkDuplicate: `${TRANSLATION_API_BASE_URL}/api/audio-files/check-duplicate`,
-    delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}`,
-    deleteByText: `${TRANSLATION_API_BASE_URL}/api/audio-files/by-text`,
-    deleteByTexts: `${TRANSLATION_API_BASE_URL}/api/audio-files/by-texts`,
-    deleteAll: `${TRANSLATION_API_BASE_URL}/api/audio-files/all`,
-    cleanupStations: `${TRANSLATION_API_BASE_URL}/api/audio-files/cleanup-stations`,
-    getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}`,
+    delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}/`,
+    deleteByText: `${TRANSLATION_API_BASE_URL}/api/audio-files/by-text/`,
+    deleteByTexts: `${TRANSLATION_API_BASE_URL}/api/audio-files/by-texts/`,
+    deleteAll: `${TRANSLATION_API_BASE_URL}/api/audio-files/all/`,
+    cleanupStations: `${TRANSLATION_API_BASE_URL}/api/audio-files/cleanup-stations/`,
+    getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/audio-files/${id}/`,
   },
   
   // Audio Segments API endpoints
   audioSegments: {
-    list: (templateId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/template/${templateId}`,
-    create: `${TRANSLATION_API_BASE_URL}/api/audio-segments`,
-    translate: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/${segmentId}/translate`,
-    generateAudio: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/${segmentId}/generate-audio`,
-    delete: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/${segmentId}`,
-    generateFullAnnouncement: (templateId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/template/${templateId}/generate-full-announcement`,
+    list: (templateId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/template/${templateId}/`,
+    create: `${TRANSLATION_API_BASE_URL}/api/audio-segments/`,
+    translate: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/${segmentId}/translate/`,
+    generateAudio: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/${segmentId}/generate-audio/`,
+    delete: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/${segmentId}/`,
+    generateFullAnnouncement: (templateId: number) => `${TRANSLATION_API_BASE_URL}/api/audio-segments/template/${templateId}/generate-full-announcement/`,
+  },
+  
+  // Final Announcement API endpoints
+  finalAnnouncement: {
+    list: `${TRANSLATION_API_BASE_URL}/api/final-announcement/list`,
+    availableTemplates: `${TRANSLATION_API_BASE_URL}/api/final-announcement/available-templates`,
+    generate: `${TRANSLATION_API_BASE_URL}/api/final-announcement/generate`,
+    progress: (generationKey: string) => `${TRANSLATION_API_BASE_URL}/api/final-announcement/progress/${generationKey}`,
+    clearAll: `${TRANSLATION_API_BASE_URL}/api/final-announcement/clear-all`,
+    clearDynamicContent: `${TRANSLATION_API_BASE_URL}/api/final-announcement/clear-dynamic-content`,
+  },
+  
+  // Announcement Audio API endpoints
+  announcementAudio: {
+    allSegments: `${TRANSLATION_API_BASE_URL}/api/announcement-audio/all-segments`,
+    generate: `${TRANSLATION_API_BASE_URL}/api/announcement-audio/generate`,
+    deleteSegment: (segmentId: number) => `${TRANSLATION_API_BASE_URL}/api/announcement-audio/segments/${segmentId}`,
+    clearAllSegments: `${TRANSLATION_API_BASE_URL}/api/announcement-audio/clear-all-segments`,
   },
 }; 

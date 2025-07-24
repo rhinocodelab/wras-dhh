@@ -58,6 +58,23 @@ async def publish_isl_announcement(request: PublishISLRequest):
         
         print(f"📝 Generating HTML file: {file_path}")
         
+        # Debug: Log the announcement texts being used
+        print(f"📝 Announcement texts for ISL page:")
+        print(f"   English: {request.announcement_texts.get('english', 'NOT_FOUND')[:100]}...")
+        print(f"   Hindi: {request.announcement_texts.get('hindi', 'NOT_FOUND')[:100]}...")
+        print(f"   Marathi: {request.announcement_texts.get('marathi', 'NOT_FOUND')[:100]}...")
+        print(f"   Gujarati: {request.announcement_texts.get('gujarati', 'NOT_FOUND')[:100]}...")
+        
+        # Ensure all languages have content
+        if not request.announcement_texts.get('english'):
+            request.announcement_texts['english'] = f"Attention please! Train number {request.train_number} {request.train_name} from {request.start_station_name} to {request.end_station_name} will arrive at platform number {request.platform_number}"
+        if not request.announcement_texts.get('hindi'):
+            request.announcement_texts['hindi'] = f"कृपया ध्यान दें! ट्रेन नंबर {request.train_number} {request.train_name} {request.start_station_name} से {request.end_station_name} तक प्लेटफॉर्म नंबर {request.platform_number} पर आएगी"
+        if not request.announcement_texts.get('marathi'):
+            request.announcement_texts['marathi'] = f"कृपया लक्ष द्या! ट्रेन क्रमांक {request.train_number} {request.train_name} {request.start_station_name} ते {request.end_station_name} पर्यंत प्लॅटफॉर्म क्रमांक {request.platform_number} वर येईल"
+        if not request.announcement_texts.get('gujarati'):
+            request.announcement_texts['gujarati'] = f"કૃપા કરીને ધ્યાન આપો! ટ્રેન નંબર {request.train_number} {request.train_name} {request.start_station_name} થી {request.end_station_name} સુધી પ્લેટફોર્મ નંબર {request.platform_number} પર પહોંચશે"
+        
         # Create the HTML content
         html_content = generate_isl_html_page(request)
         
@@ -83,7 +100,7 @@ async def publish_isl_announcement(request: PublishISLRequest):
 
 def generate_isl_html_page(request: PublishISLRequest) -> str:
     """
-    Generate the HTML content for the ISL announcement page
+    Generate the HTML content for the ISL announcement page optimized for TV displays
     """
     
     # Base URL for serving files
@@ -94,20 +111,26 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google" content="notranslate">
+    <meta name="googlebot" content="notranslate">
     <title>ISL Announcement - {request.train_name} ({request.train_number})</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&family=Noto+Sans+Gujarati:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        * {{
+            box-sizing: border-box;
+        }}
+        
         body {{
             margin: 0;
             padding: 0;
-            font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            font-family: 'Arial Unicode MS', 'Noto Sans Devanagari', 'Noto Sans Gujarati', 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            height: 100vh;
             color: white;
             position: relative;
+            overflow: hidden;
         }}
         
         .watermark {{
@@ -123,144 +146,188 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
         
         .watermark-text {{
             position: absolute;
-            font-size: 3em;
-            font-weight: bold;
-            color: rgba(255, 255, 255, 0.08);
-            transform: rotate(-45deg);
+            font-size: 8vw;
+            font-weight: 900;
+            color: rgba(255, 255, 255, 0.03);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             white-space: nowrap;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 0.1em;
         }}
         
-        .container {{
-            max-width: 1200px;
-            width: 100%;
-            padding: 20px;
+        .main-container {{
+            position: relative;
+            z-index: 10;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }}
+        
+        .header-section {{
+            padding: 1.5vh 4vw;
             text-align: center;
-        }}
-        
-        .header {{
-            margin-bottom: 30px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            border-bottom: 3px solid rgba(255, 255, 255, 0.1);
         }}
         
         .train-info {{
-            font-size: 2.5em;
-            font-weight: bold;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 3.2vw;
+            font-weight: 900;
+            margin-bottom: 1vh;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+            color: #ffffff;
+            letter-spacing: 0.05em;
         }}
         
         .route-info {{
-            font-size: 1.5em;
-            margin-bottom: 20px;
-            opacity: 0.9;
+            font-size: 2.2vw;
+            margin-bottom: 1vh;
+            color: #e0e0e0;
+            font-weight: 600;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
         }}
         
         .platform-info {{
-            font-size: 1.2em;
-            margin-bottom: 30px;
-            background: rgba(255,255,255,0.1);
-            padding: 10px 20px;
-            border-radius: 25px;
+            font-size: 1.8vw;
+            background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1));
+            padding: 1vh 3vw;
+            border-radius: 50px;
             display: inline-block;
+            font-weight: 700;
+            border: 2px solid rgba(255,255,255,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }}
+        
+        .content-section {{
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1vh 4vw;
         }}
         
         .video-container {{
-            margin: 30px 0;
-            background: rgba(0,0,0,0.3);
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            background: rgba(0,0,0,0.6);
+            padding: 2vh 4vw;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 2px solid rgba(255,255,255,0.1);
+            max-width: 60vw;
+            width: 100%;
         }}
         
         .video-player {{
-            max-width: 800px;
             width: 100%;
             height: auto;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-        }}
-        
-        .marquee-container {{
-            margin: 15px 0;
-            background: rgba(0,0,0,0.4);
-            padding: 15px;
             border-radius: 15px;
-            overflow: hidden;
-            position: relative;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+            border: 3px solid rgba(255,255,255,0.2);
+        }}
+        
+        .footer-section {{
+            padding: 1vh 4vw;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            border-top: 3px solid rgba(255, 255, 255, 0.1);
+        }}
+        
+        .footer-text {{
+            font-size: 1.8vw;
+            color: #cccccc;
+            margin: 0.5vh 0;
+            font-weight: 500;
+        }}
+        
+        .ticker-container {{
             width: 100%;
-        }}
-        
-        .marquee {{
-            font-size: 2.5em;
-            font-weight: bold;
+            overflow: hidden;
             white-space: nowrap;
-            animation: scroll-left 60s linear infinite;
-            margin: 10px 0;
-            line-height: 1.2;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Arial Unicode MS', 'Noto Sans Devanagari', 'Noto Sans Gujarati', 'Arial', sans-serif;
+            font-size: 24px;
+            padding: 10px 0;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            z-index: 1000;
+        }}
+        
+        .ticker {{
             display: inline-block;
-            min-width: 100%;
-            animation-play-state: running;
-            animation-delay: 0s;
+            animation: ticker 40s linear infinite;
         }}
         
-        .marquee.paused {{
-            animation-play-state: paused;
+        .separator {{
+            color: red;
+            padding: 0 10px;
         }}
         
-        .marquee .separator {{
-            color: #ff0000;
-            font-weight: bold;
-        }}
-        
-        @keyframes scroll-left {{
-            0% {{ transform: translateX(100%); }}
+        @keyframes ticker {{
+            0% {{ transform: translateX(0); }}
             100% {{ transform: translateX(-100%); }}
         }}
         
-        .footer {{
-            margin-top: 30px;
-            font-size: 0.9em;
-            opacity: 0.7;
+        /* Large Monitor Optimizations */
+        @media (min-width: 1920px) {{
+            .train-info {{
+                font-size: 3.5vw;
+            }}
+            .route-info {{
+                font-size: 2.5vw;
+            }}
+            .platform-info {{
+                font-size: 2vw;
+            }}
+            .ticker-container {{
+                font-size: 2.5vw;
+                padding: 15px 0;
+            }}
         }}
         
-        @media (max-width: 768px) {{
+        @media (min-width: 2560px) {{
             .train-info {{
-                font-size: 2em;
+                font-size: 3vw;
             }}
-            
             .route-info {{
-                font-size: 1.2em;
+                font-size: 2.2vw;
             }}
-            
-            .marquee {{
-                font-size: 1.1em;
+            .platform-info {{
+                font-size: 1.6vw;
             }}
-            
-            .video-player {{
-                max-width: 100%;
+            .ticker-container {{
+                font-size: 2.2vw;
+                padding: 12px 0;
+            }}
+        }}
+        
+        /* Auto-refresh for TV displays */
+        @media (min-width: 1920px) {{
+            body::after {{
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 9999;
             }}
         }}
     </style>
 </head>
 <body>
     <div class="watermark">
-        <div class="watermark-text" style="top: 10%; left: 5%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 30%; left: 25%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 50%; left: 45%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 70%; left: 65%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 90%; left: 85%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 20%; left: 15%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 40%; left: 35%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 60%; left: 55%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 80%; left: 75%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 10%; left: 95%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 30%; left: 85%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 50%; left: 75%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 70%; left: 65%;">POC DEMO</div>
-        <div class="watermark-text" style="top: 90%; left: 55%;">POC DEMO</div>
+        <div class="watermark-text">POC DEMO</div>
     </div>
-    <div class="container">
-        <div class="header">
+    
+    <div class="main-container">
+        <div class="header-section">
             <div class="train-info">
                 {request.train_name} ({request.train_number})
             </div>
@@ -272,22 +339,29 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
             </div>
         </div>
         
-        <div class="video-container">
-            <video class="video-player" controls muted>
-                <source src="{base_url}{request.isl_video_path}" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
-        </div>
-        
-        <div class="marquee-container">
-            <div class="marquee">
-                {request.announcement_texts.get('english', '')} <span class="separator">|</span> {request.announcement_texts.get('hindi', '')} <span class="separator">|</span> {request.announcement_texts.get('marathi', '')} <span class="separator">|</span> {request.announcement_texts.get('gujarati', '')} <span class="separator">|</span> {request.announcement_texts.get('english', '')} <span class="separator">|</span> {request.announcement_texts.get('hindi', '')} <span class="separator">|</span> {request.announcement_texts.get('marathi', '')} <span class="separator">|</span> {request.announcement_texts.get('gujarati', '')}
+        <div class="content-section">
+            <div class="video-container">
+                <video class="video-player" muted autoplay loop>
+                    <source src="{base_url}{request.isl_video_path}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
             </div>
         </div>
         
-        <div class="footer">
-            <p>Western Railway Announcement System for Deaf and Hard of Hearing</p>
-            <p>Generated on {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</p>
+        <div class="footer-section">
+            <div class="footer-text">Generated on {datetime.now().strftime("%B %d, %Y at %I:%M %p")}</div>
+        </div>
+    </div>
+    
+    <div class="ticker-container">
+        <div class="ticker">
+            {request.announcement_texts.get('english', 'ENGLISH_TEXT')}
+            <span class="separator">|</span>
+            {request.announcement_texts.get('hindi', 'HINDI_TEXT')}
+            <span class="separator">|</span>
+            {request.announcement_texts.get('marathi', 'MARATHI_TEXT')}
+            <span class="separator">|</span>
+            {request.announcement_texts.get('gujarati', 'GUJARATI_TEXT')}
         </div>
     </div>
     
@@ -297,38 +371,105 @@ def generate_isl_html_page(request: PublishISLRequest) -> str:
     </audio>
     
     <script>
+        // TV Display Optimizations
         const audio = document.getElementById('announcementAudio');
+        const video = document.querySelector('video');
         
-        // Force marquee to start immediately
-        document.addEventListener('DOMContentLoaded', function() {{
-            const marquee = document.querySelector('.marquee');
-            if (marquee) {{
-                // Force animation restart
-                marquee.style.animation = 'none';
-                marquee.offsetHeight; // Trigger reflow
-                marquee.style.animation = 'scroll-left 60s linear infinite';
-                console.log('Marquee animation started immediately');
+        // Function to start ticker immediately
+        function startTicker() {{
+            const ticker = document.querySelector('.ticker');
+            if (ticker) {{
+                ticker.style.animation = 'none';
+                ticker.offsetHeight; // Trigger reflow
+                ticker.style.animation = 'ticker 30s linear infinite';
+                console.log('Ticker animation started immediately');
             }}
-        }});
+        }}
         
-        // Start marquee immediately when page loads
-        window.addEventListener('load', function() {{
-            const video = document.querySelector('video');
+        // Function to ensure fonts are loaded
+        function ensureFontsLoaded() {{
+            // Debug: Check ticker content
+            const ticker = document.querySelector('.ticker');
+            console.log('Ticker content:', ticker ? ticker.textContent.trim() : 'Not found');
+            
+            if ('fonts' in document) {{
+                Promise.all([
+                    document.fonts.load('400 1em "Noto Sans Devanagari"'),
+                    document.fonts.load('400 1em "Noto Sans Gujarati"'),
+                    document.fonts.load('700 1em "Noto Sans Devanagari"'),
+                    document.fonts.load('700 1em "Noto Sans Gujarati"')
+                ]).then(() => {{
+                    console.log('All fonts loaded successfully');
+                    startTicker();
+                }}).catch(() => {{
+                    console.log('Font loading failed, starting ticker anyway');
+                    startTicker();
+                }});
+            }} else {{
+                startTicker();
+            }}
+        }}
+        
+        // Auto-refresh for TV displays (every 30 minutes)
+        function setupAutoRefresh() {{
+            if (window.innerWidth >= 1920) {{
+                setInterval(() => {{
+                    window.location.reload();
+                }}, 30 * 60 * 1000); // 30 minutes
+            }}
+        }}
+        
+        // Initialize everything
+        function initializePage() {{
+            // Start media playback
             if (video) {{
+                video.playbackRate = 2.0; // Set video speed to 2x
                 video.play().catch(e => console.log('Video auto-play failed:', e));
             }}
             
-            // Auto-play audio in loop
             if (audio) {{
                 audio.loop = true;
                 audio.play().catch(e => console.log('Audio auto-play failed:', e));
             }}
-        }});
+            
+            // Start ticker
+            ensureFontsLoaded();
+            
+            // Setup auto-refresh for TV displays
+            setupAutoRefresh();
+        }}
+        
+        // Start as soon as possible
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', initializePage);
+        }} else {{
+            initializePage();
+        }}
+        
+        // Also start on window load
+        window.addEventListener('load', initializePage);
         
         // Loop video when it ends
-        document.querySelector('video').addEventListener('ended', function() {{
-            this.currentTime = 0;
-            this.play().catch(e => console.log('Video loop failed:', e));
+        if (video) {{
+            video.addEventListener('ended', function() {{
+                this.currentTime = 0;
+                this.play().catch(e => console.log('Video loop failed:', e));
+            }});
+            
+            // Set playback rate when video loads
+            video.addEventListener('loadedmetadata', function() {{
+                this.playbackRate = 2.0;
+            }});
+        }}
+        
+        // Prevent context menu on TV displays
+        document.addEventListener('contextmenu', function(e) {{
+            e.preventDefault();
+        }});
+        
+        // Prevent text selection on TV displays
+        document.addEventListener('selectstart', function(e) {{
+            e.preventDefault();
         }});
     </script>
 </body>

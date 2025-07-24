@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2, MapPin, Search, Upload, FileSpreadsheet, X, Trash,
 import { Station } from '../types';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContainer';
-import { API_ENDPOINTS } from '../config/api';
+import { API_ENDPOINTS, TRANSLATION_API_BASE_URL } from '../config/api';
 import * as XLSX from 'xlsx';
 
 interface StationManagementProps {
@@ -335,7 +335,7 @@ export default function StationManagement({ onDataChange, onAudioChange }: Stati
       }
 
       const audioResults: AudioResults = {};
-      const fastApiUrl = 'http://localhost:5001/text-to-speech-multi-language';
+      const fastApiUrl = `${TRANSLATION_API_BASE_URL}/text-to-speech-multi-language/`;
 
       // Generate audio for each language
       for (const [langCode, stationName] of Object.entries(stationNames)) {
