@@ -116,6 +116,10 @@ print_status "Creating ISL video directories..."
 sudo mkdir -p /var/www/final_isl_vid
 sudo mkdir -p /var/www/isl_dataset
 
+# Create publish_isl directory
+print_status "Creating publish_isl directory..."
+sudo mkdir -p /var/www/publish_isl
+
 # Set proper permissions for ISL video directories
 print_status "Setting permissions for ISL video directories..."
 # Get current user and group
@@ -125,8 +129,10 @@ CURRENT_GROUP=$(id -gn)
 # Set ownership to current user but add www-data to the group
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_isl_vid
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/isl_dataset
+sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/publish_isl
 sudo chmod -R 775 /var/www/final_isl_vid
 sudo chmod -R 775 /var/www/isl_dataset
+sudo chmod -R 775 /var/www/publish_isl
 
 # Add www-data user to the current user's group for write access
 sudo usermod -a -G $CURRENT_GROUP www-data

@@ -17,7 +17,7 @@ echo "Activating virtual environment..."
 source env/bin/activate
 
 echo "Installing required packages..."
-pip install -r requirements.txt
+python3.13 -m pip install -r requirements.txt
 
 
 # Check if GCP credentials exist
@@ -54,4 +54,4 @@ echo "Press Ctrl+C to stop the server"
 echo ""
 
 # Run the FastAPI application
-python main.py 
+python3.13 main.py 

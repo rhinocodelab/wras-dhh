@@ -3,10 +3,15 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import asyncio
 
-from database import get_db
+from database import get_db, create_tables
 from models import AnnouncementTemplate
 from utils.duplicate_checker import check_template_duplicate, get_duplicate_summary
+from google.cloud import translate_v2 as translate
+from google.oauth2 import service_account
+import os
+from config import Config
 
 router = APIRouter()
 
@@ -145,4 +150,109 @@ async def delete_template(template_id: int, db: Session = Depends(get_db)):
 async def get_categories(db: Session = Depends(get_db)):
     """Get list of all available categories"""
     categories = db.query(AnnouncementTemplate.category).distinct().all()
-    return [category[0] for category in categories] 
+    return [category[0] for category in categories]
+
+def get_translate_client():
+    """Initialize Google Translate client"""
+    credentials_path = Config.get_gcp_credentials_path()
+    if not os.path.exists(credentials_path):
+        raise FileNotFoundError(f"GCP credentials file not found at {credentials_path}")
+    
+    credentials = service_account.Credentials.from_service_account_file(credentials_path)
+    return translate.Client(credentials=credentials)
+
+def translate_text(client, text, target_language):
+    """Translate text to target language"""
+    try:
+        result = client.translate(text, target_language=target_language, source_language='en')
+        return result['translatedText']
+    except Exception as e:
+        print(f"Translation error for {target_language}: {e}")
+        return ""
+
+@router.post("/templates/seed")
+async def seed_templates(db: Session = Depends(get_db)):
+    """Seed the database with sample announcement templates"""
+    try:
+        # Create tables if they don't exist
+        create_tables()
+        
+        # Initialize translation client
+        translate_client = get_translate_client()
+        
+        # Sample templates
+        sample_templates = [
+            {
+                "category": "arrival",
+                "title": "Train Arrival Announcement",
+                "english_text": "Attention please! Train number {train_number} {train_name} from {start_station_name} to {end_station_name} will arrive at platform number {platform_number}"
+            },
+            {
+                "category": "delay",
+                "title": "Train Delay Announcement", 
+                "english_text": "Attention please! Train number {train_number} {train_name} from {start_station_name} to {end_station_name} is running late."
+            },
+            {
+                "category": "cancellation",
+                "title": "Train Cancellation Announcement",
+                "english_text": "Attention please! Train number {train_number} {train_name} from {start_station_name} to {end_station_name} has been cancelled. We regret the inconvenience caused."
+            },
+            {
+                "category": "platform_change",
+                "title": "Platform Change Announcement",
+                "english_text": "Attention please! Train number {train_number} {train_name} from {start_station_name} to {end_station_name} will depart from platform number {platform_number}. Please proceed to the new platform immediately."
+            }
+        ]
+        
+        # Clear existing templates
+        existing_count = db.query(AnnouncementTemplate).count()
+        if existing_count > 0:
+            db.query(AnnouncementTemplate).delete()
+            db.commit()
+        
+        created_templates = []
+        
+        for template_data in sample_templates:
+            # Translate the English text
+            english_text = template_data['english_text']
+            marathi_text = translate_text(translate_client, english_text, 'mr')
+            hindi_text = translate_text(translate_client, english_text, 'hi')
+            gujarati_text = translate_text(translate_client, english_text, 'gu')
+            
+            # Create template object
+            template = AnnouncementTemplate(
+                category=template_data['category'],
+                title=template_data['title'],
+                english_text=english_text,
+                marathi_text=marathi_text,
+                hindi_text=hindi_text,
+                gujarati_text=gujarati_text,
+                is_active=True
+            )
+            
+            # Add to database
+            db.add(template)
+            db.commit()
+            db.refresh(template)
+            
+            created_templates.append({
+                "id": template.id,
+                "title": template.title,
+                "category": template.category,
+                "english_text": template.english_text,
+                "marathi_text": template.marathi_text,
+                "hindi_text": template.hindi_text,
+                "gujarati_text": template.gujarati_text
+            })
+        
+        return {
+            "success": True,
+            "message": f"Successfully created {len(created_templates)} new templates",
+            "templates_created": len(created_templates),
+            "templates_cleared": existing_count,
+            "templates": created_templates
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error seeding database: {str(e)}") 

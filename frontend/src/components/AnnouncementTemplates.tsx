@@ -1096,12 +1096,61 @@ export default function AnnouncementTemplates() {
     }
   };
 
+  const seedDatabase = async () => {
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch(API_ENDPOINTS.templates.seed, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `Failed to seed database: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      addToast({
+        type: 'success',
+        title: 'Database Seeded Successfully',
+        message: `${result.message}. Created ${result.templates_created} templates and cleared ${result.templates_cleared} existing templates.`
+      });
+
+      // Reload templates for the current category
+      await loadTemplatesForCategory(selectedCategory);
+      
+    } catch (error: any) {
+      console.error('Seed error:', error);
+      addToast({
+        type: 'error',
+        title: 'Seed Failed',
+        message: error.message || 'Failed to seed database'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Announcement Templates</h2>
-        <p className="text-gray-600 text-xs">Pre-defined announcement templates in multiple languages for railway announcements</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Announcement Templates</h2>
+          <p className="text-gray-600 text-xs">Pre-defined announcement templates in multiple languages for railway announcements</p>
+        </div>
+        <button
+          onClick={seedDatabase}
+          disabled={isLoading}
+          className="px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors"
+          title="Generate seed data with sample announcement templates"
+        >
+          Seed Database
+        </button>
       </div>
 
       {/* Combined Category Selection and Templates */}
@@ -1286,9 +1335,7 @@ export default function AnnouncementTemplates() {
               <FileText className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No templates found</h3>
               <p className="mt-1 text-sm text-gray-500">
-                No templates available for this category. Please seed the database first by running:
-                <br />
-                <code className="bg-gray-100 px-2 py-1 rounded text-xs">./seed_database.sh</code>
+                No templates available for this category. Click the "Seed Database" button above to generate sample templates.
               </p>
             </div>
           )}

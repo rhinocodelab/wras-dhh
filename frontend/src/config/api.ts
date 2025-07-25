@@ -44,6 +44,7 @@ export const API_ENDPOINTS = {
     delete: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}/`,
     getById: (id: number) => `${TRANSLATION_API_BASE_URL}/api/templates/${id}/`,
     categories: `${TRANSLATION_API_BASE_URL}/api/templates/categories/list/`,
+    seed: `${TRANSLATION_API_BASE_URL}/api/templates/seed`,
   },
   
   // Audio Files API endpoints
