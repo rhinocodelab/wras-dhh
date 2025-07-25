@@ -22,7 +22,7 @@ from routes import announcement_audio
 from routes import final_announcement
 from routes import publish_isl
 from routes import publish_speech_isl
-from routes import text_to_isl
+from routes import text_to_isl, audio_file_to_isl
 from utils.isl_utils import generate_isl_video_from_text, generate_merged_audio, convert_digits_to_words
 
 # Initialize FastAPI app
@@ -416,6 +416,7 @@ app.include_router(final_announcement.router, prefix="/api", tags=["final-announ
 app.include_router(publish_isl.router, prefix="/api", tags=["publish-isl"])
 app.include_router(publish_speech_isl.router, prefix="/api", tags=["publish-speech-isl"])
 app.include_router(text_to_isl.router, prefix="/api", tags=["text-to-isl"])
+app.include_router(audio_file_to_isl.router, prefix="/api", tags=["audio-file-to-isl"])
 
 @app.post("/generate-isl-video")
 async def generate_isl_video(request: ISLVideoRequest):
@@ -1568,6 +1569,32 @@ for publish_dir in possible_publish_text_isl_dirs:
 
 if not publish_text_isl_mounted:
     print("❌ No publish_text_isl directory could be mounted. Published Text to ISL HTML files will not be available")
+
+# Mount Audio File to ISL directories
+try:
+    os.makedirs("/var/www/final_audio_file_isl_vid", exist_ok=True)
+    app.mount("/final_audio_file_isl_vid", StaticFiles(directory="/var/www/final_audio_file_isl_vid"), name="final_audio_file_isl_vid")
+    print("✅ Audio File to ISL videos mounted at /final_audio_file_isl_vid")
+except Exception as e:
+    print(f"⚠️ Could not mount Audio File to ISL videos: {e}")
+    print("Audio File to ISL videos will not be available")
+
+# Mount Audio File to ISL publish directory
+publish_audio_file_isl_mounted = False
+possible_publish_audio_file_isl_dirs = ["/var/www/publish_audio_file_isl", "./publish_audio_file_isl", "/tmp/publish_audio_file_isl"]
+for publish_dir in possible_publish_audio_file_isl_dirs:
+    try:
+        os.makedirs(publish_dir, exist_ok=True)
+        if os.path.exists(publish_dir):
+            app.mount("/publish_audio_file_isl", StaticFiles(directory=publish_dir), name="publish_audio_file_isl")
+            print(f"✅ Published Audio File to ISL HTML files mounted at /publish_audio_file_isl from {publish_dir}")
+            publish_audio_file_isl_mounted = True
+            break
+    except Exception as e:
+        print(f"⚠️ Could not mount published Audio File to ISL HTML files from {publish_dir}: {e}")
+        continue
+if not publish_audio_file_isl_mounted:
+    print("❌ No publish_audio_file_isl directory could be mounted. Published Audio File to ISL HTML files will not be available")
 
 # ISL Video serving endpoint
 @app.get("/api/isl-video/{filename}")

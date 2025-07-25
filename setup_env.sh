@@ -136,17 +136,20 @@ print_subheader "Creating all necessary directories in /var/www/..."
 sudo mkdir -p /var/www/audio_files
 sudo mkdir -p /var/www/audio_files/merged_speech_to_isl
 sudo mkdir -p /var/www/audio_files/merged_text_isl
+sudo mkdir -p /var/www/audio_files/merged_audio_file_isl
 
 # ISL video directories
 sudo mkdir -p /var/www/final_isl_vid
 sudo mkdir -p /var/www/final_speech_isl_vid
 sudo mkdir -p /var/www/final_text_isl_vid
+sudo mkdir -p /var/www/final_audio_file_isl_vid
 sudo mkdir -p /var/www/isl_dataset
 
 # Publish directories
 sudo mkdir -p /var/www/publish_isl
 sudo mkdir -p /var/www/publish_speech_isl
 sudo mkdir -p /var/www/publish_text_isl
+sudo mkdir -p /var/www/publish_audio_file_isl
 
 # Create ISL dataset subdirectories
 print_subheader "Creating ISL dataset subdirectories..."
@@ -176,20 +179,24 @@ sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/audio_files
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_isl_vid
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_speech_isl_vid
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_text_isl_vid
+sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_audio_file_isl_vid
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/isl_dataset
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/publish_isl
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/publish_speech_isl
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/publish_text_isl
+sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/publish_audio_file_isl
 
 # Set permissions to 775 for shared access
 sudo chmod -R 775 /var/www/audio_files
 sudo chmod -R 775 /var/www/final_isl_vid
 sudo chmod -R 775 /var/www/final_speech_isl_vid
 sudo chmod -R 775 /var/www/final_text_isl_vid
+sudo chmod -R 775 /var/www/final_audio_file_isl_vid
 sudo chmod -R 775 /var/www/isl_dataset
 sudo chmod -R 775 /var/www/publish_isl
 sudo chmod -R 775 /var/www/publish_speech_isl
 sudo chmod -R 775 /var/www/publish_text_isl
+sudo chmod -R 775 /var/www/publish_audio_file_isl
 
 # Add www-data user to the current user's group for write access
 sudo usermod -a -G $CURRENT_GROUP www-data
@@ -431,6 +438,28 @@ sudo tee /etc/apache2/sites-available/wras-dhh.conf > /dev/null << 'EOF'
         </IfModule>
     </Directory>
     
+    # Final Audio File to ISL videos alias
+    Alias /final_audio_file_isl_vid /var/www/final_audio_file_isl_vid
+    <Directory /var/www/final_audio_file_isl_vid>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+        
+        # Set proper MIME types for video files
+        AddType video/mp4 .mp4
+        
+        # Ensure proper headers for video streaming
+        <FilesMatch "\.mp4$">
+            Header set Accept-Ranges "bytes"
+            Header set Cache-Control "public, max-age=3600"
+        </FilesMatch>
+        
+        # Enable range requests for video streaming
+        <IfModule mod_headers.c>
+            Header set Accept-Ranges "bytes"
+        </IfModule>
+    </Directory>
+    
     # ISL dataset alias
     Alias /isl_dataset /var/www/isl_dataset
     <Directory /var/www/isl_dataset>
@@ -501,6 +530,22 @@ sudo tee /etc/apache2/sites-available/wras-dhh.conf > /dev/null << 'EOF'
         </FilesMatch>
     </Directory>
     
+    # Publish Audio File to ISL alias
+    Alias /publish_audio_file_isl /var/www/publish_audio_file_isl
+    <Directory /var/www/publish_audio_file_isl>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+        
+        # Set proper MIME types for HTML files
+        AddType text/html .html
+        
+        # Ensure proper headers for HTML files
+        <FilesMatch "\.html$">
+            Header set Cache-Control "public, max-age=3600"
+        </FilesMatch>
+    </Directory>
+    
     # Logging
     ErrorLog ${APACHE_LOG_DIR}/wras_dhh_error.log
     CustomLog ${APACHE_LOG_DIR}/wras_dhh_access.log combined
@@ -553,26 +598,31 @@ AUDIO_FILES_DIR = "/var/www/audio_files"
 AUDIO_FILES_URL = "/audio_files"
 MERGED_SPEECH_TO_ISL_DIR = "/var/www/audio_files/merged_speech_to_isl"
 MERGED_TEXT_ISL_DIR = "/var/www/audio_files/merged_text_isl"
+MERGED_AUDIO_FILE_ISL_DIR = "/var/www/audio_files/merged_audio_file_isl"
 
 # ISL Video Configuration
 ISL_DATASET_DIR = "/var/www/isl_dataset"
 FINAL_ISL_VID_DIR = "/var/www/final_isl_vid"
 FINAL_SPEECH_ISL_VID_DIR = "/var/www/final_speech_isl_vid"
 FINAL_TEXT_ISL_VID_DIR = "/var/www/final_text_isl_vid"
+FINAL_AUDIO_FILE_ISL_VID_DIR = "/var/www/final_audio_file_isl_vid"
 
 # Publish Directories
 PUBLISH_ISL_DIR = "/var/www/publish_isl"
 PUBLISH_SPEECH_ISL_DIR = "/var/www/publish_speech_isl"
 PUBLISH_TEXT_ISL_DIR = "/var/www/publish_text_isl"
+PUBLISH_AUDIO_FILE_ISL_DIR = "/var/www/publish_audio_file_isl"
 
 # URL Patterns
 ISL_DATASET_URL = "/isl_dataset"
 FINAL_ISL_VID_URL = "/final_isl_vid"
 FINAL_SPEECH_ISL_VID_URL = "/final_speech_isl_vid"
 FINAL_TEXT_ISL_VID_URL = "/final_text_isl_vid"
+FINAL_AUDIO_FILE_ISL_VID_URL = "/final_audio_file_isl_vid"
 PUBLISH_ISL_URL = "/publish_isl"
 PUBLISH_SPEECH_ISL_URL = "/publish_speech_isl"
 PUBLISH_TEXT_ISL_URL = "/publish_text_isl"
+PUBLISH_AUDIO_FILE_ISL_URL = "/publish_audio_file_isl"
 
 # Supported Formats
 SUPPORTED_AUDIO_FORMATS = ['.mp3', '.wav', '.ogg', '.m4a', '.aac']
@@ -597,10 +647,12 @@ FFMPEG_CODEC = "copy"
 # /var/www/
 # ├── audio_files/
 # │   ├── merged_speech_to_isl/     # Speech-to-ISL merged audio files
-# │   └── merged_text_isl/          # Text-to-ISL merged audio files
+# │   ├── merged_text_isl/          # Text-to-ISL merged audio files
+# │   └── merged_audio_file_isl/    # Audio File to ISL merged audio files
 # ├── final_isl_vid/                # Original ISL videos
 # ├── final_speech_isl_vid/         # Speech-to-ISL generated videos
 # ├── final_text_isl_vid/           # Text-to-ISL generated videos
+# ├── final_audio_file_isl_vid/     # Audio File to ISL generated videos
 # ├── isl_dataset/                  # ISL video dataset
 # │   ├── 1/, 2/, 3/               # Number signs
 # │   ├── arrive/, arriving/       # Arrival signs
@@ -616,7 +668,8 @@ FFMPEG_CODEC = "copy"
 # │   └── vapi/                    # Vapi station
 # ├── publish_isl/                 # Published ISL HTML pages
 # ├── publish_speech_isl/          # Published Speech-to-ISL HTML pages
-# └── publish_text_isl/            # Published Text-to-ISL HTML pages
+# ├── publish_text_isl/            # Published Text-to-ISL HTML pages
+# └── publish_audio_file_isl/      # Published Audio File to ISL HTML pages
 
 # Example Usage:
 # Audio files: http://your-domain/audio_files/filename.mp3
@@ -634,10 +687,12 @@ echo "  • /var/www/audio_files/ (with merged subdirectories)"
 echo "  • /var/www/final_isl_vid/"
 echo "  • /var/www/final_speech_isl_vid/"
 echo "  • /var/www/final_text_isl_vid/"
+echo "  • /var/www/final_audio_file_isl_vid/"
 echo "  • /var/www/isl_dataset/ (with all subdirectories)"
 echo "  • /var/www/publish_isl/"
 echo "  • /var/www/publish_speech_isl/"
 echo "  • /var/www/publish_text_isl/"
+echo "  • /var/www/publish_audio_file_isl/"
 
 echo ""
 echo -e "${GREEN}🔧 System Configuration:${NC}"
@@ -654,6 +709,7 @@ echo "  • Audio files: http://your-domain/audio_files/filename.mp3"
 echo "  • ISL videos: http://your-domain/final_isl_vid/filename.mp4"
 echo "  • Speech-to-ISL videos: http://your-domain/final_speech_isl_vid/filename.mp4"
 echo "  • Text-to-ISL videos: http://your-domain/final_text_isl_vid/filename.mp4"
+echo "  • Audio File to ISL videos: http://your-domain/final_audio_file_isl_vid/filename.mp4"
 echo "  • Dataset videos: http://your-domain/isl_dataset/word/video.mp4"
 echo "  • Published pages: http://your-domain/publish_*/filename.html"
 
