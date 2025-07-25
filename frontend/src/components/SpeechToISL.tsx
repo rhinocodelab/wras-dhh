@@ -1,7 +1,72 @@
 import React, { useState, useRef } from 'react';
-import { Mic, MicOff, Play, Square, Download, Languages } from 'lucide-react';
+import { Mic, MicOff, Play, Square, Download, Languages, X } from 'lucide-react';
 import { useToast } from './ToastContainer';
 import { TRANSLATION_API_BASE_URL } from '../config/api';
+
+interface ProgressModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  message: string;
+  progress?: number;
+  isError?: boolean;
+}
+
+const ProgressModal: React.FC<ProgressModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  title, 
+  message, 
+  progress, 
+  isError = false 
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className={`text-lg font-semibold ${isError ? 'text-red-600' : 'text-gray-900'}`}>
+            {title}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="mb-4">
+          <div className="text-gray-600 text-sm whitespace-pre-line">{message}</div>
+        </div>
+        
+        {progress !== undefined && !isError && (
+          <div className="mb-4">
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{progress}% complete</p>
+          </div>
+        )}
+        
+        {isError && (
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
+            >
+              Close
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 interface SpeechToISLProps {
   onDataChange?: () => void;
@@ -17,6 +82,18 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isBrowserSupported, setIsBrowserSupported] = useState(true);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  
+  // Progress modal state
+  const [progressModal, setProgressModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    progress: 0,
+    isError: false
+  });
+  
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [micTestResult, setMicTestResult] = useState<string>('');
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -126,11 +203,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingStartTime(Date.now());
-      addToast({
-        type: 'success',
-        title: 'Recording Started',
-        message: `Recording in ${selectedLanguage} language`
-      });
+      // Toast removed - user can see recording status from the UI
     } catch (error: any) {
       console.error('Error starting recording:', error);
       
@@ -159,10 +232,12 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
       const recordingDuration = recordingStartTime ? Date.now() - recordingStartTime : 0;
       
       if (recordingDuration < 1000) { // Less than 1 second
-        addToast({
-          type: 'warning',
+        setProgressModal({
+          isOpen: true,
           title: 'Recording Too Short',
-          message: 'Please record for at least 1 second'
+          message: 'Please record for at least 1 second',
+          progress: 0,
+          isError: true
         });
         setIsRecording(false);
         setRecordingStartTime(null);
@@ -173,22 +248,55 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
       setRecordingStartTime(null);
-      addToast({
-        type: 'info',
-        title: 'Recording Stopped',
-        message: 'Processing audio...'
-      });
+      
+      // Progress modal will be shown in processAudio function
     }
   };
 
   const processAudio = async (audioBlob: Blob) => {
     setIsProcessing(true);
+    
+    // Show progress modal for speech processing
+    setProgressModal({
+      isOpen: true,
+      title: 'Processing Speech',
+      message: 'Converting speech to text and translating to English...',
+      progress: 10,
+      isError: false
+    });
+
     try {
       // Check audio file size
       console.log('Audio blob size:', audioBlob.size, 'bytes');
       if (audioBlob.size < 1000) { // Less than 1KB
-        throw new Error('Audio file is too small. Please record for longer.');
+        setProgressModal({
+          isOpen: true,
+          title: 'Recording Too Short',
+          message: 'Your recording is too short. Please record for at least 2-3 seconds with clear speech.',
+          progress: 0,
+          isError: true
+        });
+        return;
       }
+      
+      // Check if audio file is too large (more than 10MB)
+      if (audioBlob.size > 10 * 1024 * 1024) {
+        setProgressModal({
+          isOpen: true,
+          title: 'Recording Too Large',
+          message: 'Your recording is too large. Please record a shorter message (under 30 seconds).',
+          progress: 0,
+          isError: true
+        });
+        return;
+      }
+      
+      // Update progress
+      setProgressModal(prev => ({
+        ...prev,
+        message: 'Preparing audio file for upload...',
+        progress: 30
+      }));
       
       // Create FormData for file upload
       const formData = new FormData();
@@ -207,30 +315,64 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
       formData.append('audio', audioBlob, filename);
       formData.append('language', selectedLanguage);
 
+      // Update progress
+      setProgressModal(prev => ({
+        ...prev,
+        message: 'Uploading audio file to server...',
+        progress: 50
+      }));
+
       const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/speech-to-text`, {
         method: 'POST',
         body: formData
       });
 
+      // Update progress
+      setProgressModal(prev => ({
+        ...prev,
+        message: 'Processing speech and translating to English...',
+        progress: 80
+      }));
+
       if (response.ok) {
         const result = await response.json();
         console.log('Speech-to-text API response:', result);
         
-        if (result.success === false && result.message === 'No speech detected in the audio') {
-          throw new Error('No speech detected. Please speak clearly and try again.');
+        if (result.success === false) {
+          // Handle specific error cases
+          if (result.message === 'No speech detected in the audio') {
+            setProgressModal({
+              isOpen: true,
+              title: 'No Speech Detected',
+              message: 'No speech was detected in your recording. Please try again with:\n\n• Speak louder and more clearly\n• Ensure your microphone is working\n• Record in a quieter environment\n• Speak for at least 2-3 seconds\n• Check if your browser has microphone permission',
+              progress: 0,
+              isError: true
+            });
+            return; // Don't throw error, just show the modal
+          } else {
+            throw new Error(result.message || 'Speech recognition failed');
+          }
         }
         
-        setConvertedText(result.spoken_text || '');
-        setEnglishText(result.english_text || '');
+        setConvertedText(formatTextWithSpaces(result.spoken_text || ''));
+        setEnglishText(convertDigitsToWords(removePunctuation(formatTextWithSpaces(result.english_text || ''))));
         
         console.log('Setting converted text:', result.spoken_text);
         console.log('Setting English text:', result.english_text);
         
-        addToast({
-          type: 'success',
-          title: 'Speech Converted',
-          message: 'Text converted successfully'
+        // Show success in modal
+        setProgressModal({
+          isOpen: true,
+          title: 'Speech Converted Successfully',
+          message: 'Text converted and translated successfully',
+          progress: 100,
+          isError: false
         });
+
+        // Close modal after 2 seconds
+        setTimeout(() => {
+          setProgressModal(prev => ({ ...prev, isOpen: false }));
+        }, 2000);
       } else {
         const errorData = await response.json();
         console.error('API error response:', errorData);
@@ -238,10 +380,14 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
       }
     } catch (error: any) {
       console.error('Error processing audio:', error);
-      addToast({
-        type: 'error',
+      
+      // Show error in modal
+      setProgressModal({
+        isOpen: true,
         title: 'Conversion Failed',
-        message: error.message || 'Failed to convert speech to text'
+        message: error.message || 'Failed to convert speech to text',
+        progress: 0,
+        isError: true
       });
     } finally {
       setIsProcessing(false);
@@ -255,8 +401,30 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
     message: string;
   } | null>(null);
 
+  const [generatedFiles, setGeneratedFiles] = useState<{
+    videoFile?: string;
+    audioFile?: string;
+  }>({});
+
   const generateISLVideo = async (text: string) => {
     try {
+      // Show progress modal
+      setProgressModal({
+        isOpen: true,
+        title: 'Generating ISL Video',
+        message: 'Initializing video generation and searching for existing audio files...',
+        progress: 10,
+        isError: false
+      });
+
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setProgressModal(prev => ({
+          ...prev,
+          progress: Math.min(prev.progress + 10, 90)
+        }));
+      }, 1000);
+
       const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/speech-to-isl`, {
         method: 'POST',
         headers: {
@@ -269,54 +437,200 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
         })
       });
 
-              if (response.ok) {
-          const result = await response.json();
-          console.log('Speech-to-ISL result:', result);
+      clearInterval(progressInterval);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Speech-to-ISL result:', result);
+        
+        if (result.success) {
+          setResultData({
+            videoUrl: result.video_url,
+            audioUrl: result.audio_url,
+            success: true,
+            message: result.message
+          });
           
-          if (result.success) {
-            setResultData({
-              videoUrl: result.video_url,
-              audioUrl: result.audio_url,
-              success: true,
-              message: result.message
-            });
-            
-            // Update video URL for the player
-            if (result.video_url) {
-              setVideoUrl(result.video_url);
-            }
-            
-            addToast({
-              type: 'success',
-              title: 'ISL Video Generated',
-              message: 'Video and audio created successfully'
-            });
-          } else {
-            throw new Error(result.message || 'Failed to generate ISL video');
+          // Update video URL for the player
+          if (result.video_url) {
+            setVideoUrl(result.video_url);
           }
+          
+          // Store generated file paths for cleanup
+          setGeneratedFiles({
+            videoFile: result.video_url ? result.video_url.split('/').pop() : undefined,
+            audioFile: result.audio_url ? result.audio_url.split('/').pop() : undefined
+          });
+          
+          // Show success in modal
+          setProgressModal({
+            isOpen: true,
+            title: 'ISL Video Generated Successfully',
+            message: 'Video and audio created successfully using existing audio files where available',
+            progress: 100,
+            isError: false
+          });
+
+          // Close modal after 2 seconds
+          setTimeout(() => {
+            setProgressModal(prev => ({ ...prev, isOpen: false }));
+          }, 2000);
         } else {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to generate ISL video');
+          throw new Error(result.message || 'Failed to generate ISL video');
         }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to generate ISL video');
+      }
     } catch (error: any) {
       console.error('Error generating ISL video:', error);
-      addToast({
-        type: 'error',
+      
+      // Show error in modal
+      setProgressModal({
+        isOpen: true,
         title: 'Video Generation Failed',
-        message: error.message || 'Failed to generate ISL video'
+        message: error.message || 'Failed to generate ISL video',
+        progress: 0,
+        isError: true
       });
     }
   };
 
-  const clearAll = () => {
+  const formatTextWithSpaces = (text: string) => {
+    // Add spaces between digits when there are more than 2 consecutive digits
+    return text.replace(/(\d{3,})/g, (match) => {
+      return match.split('').join(' ');
+    });
+  };
+
+  const removePunctuation = (text: string) => {
+    return text.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
+  const convertDigitsToWords = (text: string) => {
+    const digitMapping: { [key: string]: string } = {
+      '0': 'zero',
+      '1': 'one',
+      '2': 'two',
+      '3': 'three',
+      '4': 'four',
+      '5': 'five',
+      '6': 'six',
+      '7': 'seven',
+      '8': 'eight',
+      '9': 'nine'
+    };
+    
+    // Replace individual digits with their word equivalents
+    return text.replace(/\d/g, (digit) => digitMapping[digit] || digit);
+  };
+
+  const testMicrophone = async () => {
+    try {
+      setIsTestingMic(true);
+      setMicTestResult('Testing microphone...');
+      
+      // Check if MediaDevices API is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setMicTestResult('❌ MediaDevices API not supported in this browser');
+        return;
+      }
+
+      // Check if running on HTTPS
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        setMicTestResult('❌ Microphone access requires HTTPS');
+        return;
+      }
+
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1
+        } 
+      });
+      
+      // Stop the stream immediately after testing
+      stream.getTracks().forEach(track => track.stop());
+      
+      setMicTestResult('✅ Microphone is working properly');
+      
+      // Clear the result after 3 seconds
+      setTimeout(() => {
+        setMicTestResult('');
+      }, 3000);
+      
+    } catch (error: any) {
+      console.error('Microphone test error:', error);
+      
+      let errorMessage = '❌ Microphone test failed';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = '❌ Microphone access denied. Please allow microphone access in your browser settings.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = '❌ No microphone found. Please connect a microphone and try again.';
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = '❌ Your browser does not support microphone access.';
+      }
+      
+      setMicTestResult(errorMessage);
+    } finally {
+      setIsTestingMic(false);
+    }
+  };
+
+  const clearAll = async () => {
+    // Clean up generated files on server if they exist
+    if (generatedFiles.videoFile || generatedFiles.audioFile) {
+      try {
+        // Clean up video file
+        if (generatedFiles.videoFile) {
+          await fetch(`${TRANSLATION_API_BASE_URL}/api/cleanup-file`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              file_path: `/var/www/final_speech_isl_vid/${generatedFiles.videoFile}`
+            })
+          });
+        }
+        
+        // Clean up audio file
+        if (generatedFiles.audioFile) {
+          await fetch(`${TRANSLATION_API_BASE_URL}/api/cleanup-file`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              file_path: `/var/www/audio_files/merged_speech_to_isl/${generatedFiles.audioFile}`
+            })
+          });
+        }
+        
+        console.log('Generated files cleaned up successfully');
+      } catch (error) {
+        console.error('Error cleaning up generated files:', error);
+      }
+    }
+    
+    // Clear UI state
     setConvertedText('');
     setEnglishText('');
     setVideoUrl('');
     setIsVideoPlaying(false);
+    setResultData(null);
+    setMicTestResult(''); // Clear microphone test result
+    setGeneratedFiles({}); // Clear generated files tracking
+    
     addToast({
       type: 'info',
       title: 'Cleared',
-      message: 'All data cleared'
+      message: 'All data, generated video, and audio cleared from server'
     });
   };
 
@@ -373,6 +687,32 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
               </div>
             </div>
 
+            {/* Recording Tips and Microphone Test */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium text-blue-800">📝 Recording Tips:</h4>
+                <button
+                  onClick={testMicrophone}
+                  disabled={isTestingMic}
+                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {isTestingMic ? 'Testing...' : 'Test Mic'}
+                </button>
+              </div>
+              <ul className="text-xs text-blue-700 space-y-1">
+                <li>• Speak clearly and at a normal pace</li>
+                <li>• Record in a quiet environment</li>
+                <li>• Keep microphone close to your mouth</li>
+                <li>• Record for at least 2-3 seconds</li>
+                <li>• Avoid background noise and echo</li>
+              </ul>
+              {micTestResult && (
+                <div className="mt-2 p-2 bg-white rounded text-xs">
+                  {micTestResult}
+                </div>
+              )}
+            </div>
+
             {/* Status Indicators */}
             {(isRecording || isProcessing) && (
               <div className="space-y-2">
@@ -392,8 +732,6 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
               </div>
             )}
 
-
-
             {/* Text Areas */}
             <div className="space-y-4">
               {/* Spoken Language Text Area */}
@@ -403,12 +741,11 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                 </label>
                 <textarea
                   value={convertedText}
-                  onChange={(e) => setConvertedText(e.target.value)}
+                  onChange={(e) => setConvertedText(formatTextWithSpaces(e.target.value))}
                   placeholder={`Enter or record text in ${selectedLanguage}...`}
                   className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 text-sm resize-none"
                   disabled={isProcessing}
                 />
-
               </div>
 
               {/* English Text Area for ISL */}
@@ -418,25 +755,25 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                 </label>
                 <textarea
                   value={englishText}
-                  onChange={(e) => setEnglishText(e.target.value)}
+                  onChange={(e) => setEnglishText(convertDigitsToWords(removePunctuation(formatTextWithSpaces(e.target.value))))}
                   placeholder="Enter English text for ISL video generation..."
                   className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 text-sm resize-none"
                 />
-
               </div>
 
               {/* Clear All Button */}
-              {(convertedText || englishText) && (
+              {(convertedText || englishText || resultData) && (
                 <div className="flex space-x-2">
-                  <button
-                    onClick={clearAll}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-medium"
-                  >
-                    <Square className="h-4 w-4" />
-                    <span>Clear All</span>
-                  </button>
+                                  <button
+                  onClick={() => clearAll()}
+                  className="px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-xs transition-colors"
+                >
+                  Clear All
+                </button>
                 </div>
               )}
+
+
             </div>
           </div>
         </div>
@@ -493,6 +830,19 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
               </div>
             )}
 
+            {/* Generate ISL Video Button */}
+            {englishText && (
+              <div className="flex justify-center">
+                <button
+                  onClick={() => generateISLVideo(englishText || convertedText)}
+                  disabled={!englishText}
+                  className="px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Generate ISL Video
+                </button>
+              </div>
+            )}
+
             {/* Audio Player */}
             {resultData && resultData.audioUrl && (
               <div>
@@ -503,31 +853,27 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                     controls
                     autoPlay
                   >
+                    <source src={resultData.audioUrl} type="audio/mpeg" />
                     <source src={resultData.audioUrl} type="audio/wav" />
                     Your browser does not support the audio tag.
                   </audio>
                 </div>
               </div>
             )}
-
-            {/* Generate ISL Video Button */}
-            {englishText && (
-              <div className="flex justify-center">
-                                  <button
-                    onClick={() => generateISLVideo(englishText || convertedText)}
-                    disabled={!englishText}
-                    className="flex items-center space-x-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                  <Play className="h-5 w-5" />
-                  <span>Generate ISL Video</span>
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
+      {/* Progress Modal */}
+      <ProgressModal
+        isOpen={progressModal.isOpen}
+        onClose={() => setProgressModal(prev => ({ ...prev, isOpen: false }))}
+        title={progressModal.title}
+        message={progressModal.message}
+        progress={progressModal.progress}
+        isError={progressModal.isError}
+      />
 
     </div>
   );
-} 
+}

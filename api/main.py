@@ -15,6 +15,7 @@ from google.protobuf import wrappers_pb2
 from google.oauth2 import service_account
 from config import Config
 from database import create_tables
+from models import AudioFile
 from routes import templates
 from routes import audio_files
 from routes import announcement_audio
@@ -771,7 +772,7 @@ async def speech_to_isl(request: SpeechToISLRequest):
         
         # Create response URLs (relative paths that will be proxied)
         video_url = f"/translation-api/api/speech-isl-video/{isl_video_path}" if isl_video_path else ""
-        audio_url = f"/translation-api/api/audio/{os.path.basename(audio_path)}" if audio_path else ""
+        audio_url = f"/translation-api/api/speech-isl-audio/{os.path.basename(audio_path)}" if audio_path else ""
         
         return SpeechToISLResponse(
             success=True,
@@ -940,7 +941,8 @@ async def generate_audio_file(text: str, language: str) -> str:
             audio_encoding=texttospeech.AudioEncoding.MP3,
             speaking_rate=0.9,
             pitch=0.0,
-            volume_gain_db=0.0
+            volume_gain_db=0.0,
+            sample_rate_hertz=48000  # Consistent sample rate
         )
         
         # Perform the text-to-speech request
@@ -952,17 +954,26 @@ async def generate_audio_file(text: str, language: str) -> str:
         
         # Save audio to file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"audio_{language.lower()}_{timestamp}.mp3"
-        file_path = f"/var/www/audio_files/{filename}"
+        filename = f"speech_to_isl_{language.lower()}_{timestamp}.mp3"
         
-        # Ensure directory exists
-        os.makedirs("/var/www/audio_files", exist_ok=True)
+        # Create merged_speech_to_isl directory if it doesn't exist
+        merged_dir = "/var/www/audio_files/merged_speech_to_isl"
+        os.makedirs(merged_dir, exist_ok=True)
+        file_path = f"{merged_dir}/{filename}"
         
         # Write audio content to file
         with open(file_path, "wb") as f:
             f.write(response.audio_content)
         
-        print(f"Audio file saved: {file_path}")
+        # Verify the file was created and has content
+        if not os.path.exists(file_path):
+            raise Exception("Failed to create audio file")
+        
+        file_size = os.path.getsize(file_path)
+        if file_size < 1000:
+            raise Exception(f"Generated audio file is too small: {file_size} bytes")
+        
+        print(f"Audio file saved: {file_path} ({file_size} bytes)")
         return file_path
         
     except Exception as e:
@@ -976,7 +987,7 @@ async def generate_merged_audio(spoken_text: str, english_text: str, language: s
     try:
         print(f"Generating merged audio - Spoken: {spoken_text}, English: {english_text}, Language: {language}")
         
-        # Create merged audio using existing audio files
+        # Create merged audio using existing audio files from Audio Files page
         audio_files = []
         
         # Split English text into words to find matching audio files
@@ -992,35 +1003,84 @@ async def generate_merged_audio(spoken_text: str, english_text: str, language: s
         
         spoken_language = language_mapping.get(language, "English")
         
-        # Find existing audio files for each word in all languages
-        for word in english_words:
-            # Look for audio files in all four languages
-            for lang in ["English", "Hindi", "Marathi", "Gujarati"]:
-                audio_file_path = await find_existing_audio_file(word, lang)
-                if audio_file_path:
-                    print(f"Found existing audio for '{word}' in {lang}: {audio_file_path}")
-                    audio_files.append(audio_file_path)
-                    break  # Use first language found for each word
+        print(f"Looking for audio files for words: {english_words}")
+        print(f"Spoken language: {spoken_language}")
         
-        # If no existing audio files found, generate new ones
-        if not audio_files:
-            print("No existing audio files found, generating new ones...")
-            # Add spoken language audio if different from English
-            if spoken_text and english_text and spoken_text != english_text:
-                spoken_audio_path = await generate_audio_file(spoken_text, language)
-                audio_files.append(spoken_audio_path)
+        # First, try to find complete audio files from Audio Files page
+        complete_audio_file = await find_complete_audio_file(english_text)
+        if complete_audio_file:
+            print(f"Found complete audio file for text: {complete_audio_file}")
+            return complete_audio_file
+        
+        # If no complete audio file found, try word-by-word matching
+        print("No complete audio file found, searching word by word...")
+        
+        # Find existing audio files organized by language first
+        all_language_audio_files = []
+        languages_to_search = ["English", "Hindi", "Marathi", "Gujarati"]
+        
+        # Organize audio files by language first, then by word
+        for lang in languages_to_search:
+            language_audio_files = []
             
-            # Add English audio
-            if english_text:
-                english_audio_path = await generate_audio_file(english_text, "English")
-                audio_files.append(english_audio_path)
+            for word in english_words:
+                # Clean the word (remove punctuation, etc.)
+                clean_word = word.strip('.,!?;:()[]{}"\'').lower()
+                if clean_word:
+                    # Search for audio file for this word in this language
+                    audio_file_path = await find_existing_audio_file(clean_word, lang)
+                    if audio_file_path:
+                        print(f"Found existing audio for '{clean_word}' in {lang}: {audio_file_path}")
+                        language_audio_files.append(audio_file_path)
+                    else:
+                        print(f"No existing audio found for '{clean_word}' in {lang}")
+            
+            # Add all audio files for this language to the main list
+            all_language_audio_files.extend(language_audio_files)
         
-        # Merge audio files if we have multiple
-        if len(audio_files) > 1:
-            merged_path = await merge_audio_files(audio_files)
+        # If we found some audio files, merge them
+        if all_language_audio_files:
+            print(f"Found {len(all_language_audio_files)} audio files organized by language, merging...")
+            if len(all_language_audio_files) > 1:
+                merged_path = await merge_audio_files(all_language_audio_files)
+                return merged_path
+            else:
+                return all_language_audio_files[0]
+        
+        # If no existing audio files found, generate new audio for the complete phrase in all four languages
+        print("No existing audio files found, generating new audio for the complete phrase in all four languages...")
+        fallback_audio_files = []
+        
+        # Generate audio in all four languages in sequence: English, Hindi, Marathi, Gujarati
+        languages_to_generate = ["English", "Hindi", "Marathi", "Gujarati"]
+        
+        for lang in languages_to_generate:
+            try:
+                if english_text:
+                    # Generate audio for the complete phrase in each language
+                    audio_path = await generate_audio_file(english_text, lang)
+                    fallback_audio_files.append(audio_path)
+                    print(f"Generated {lang} audio: {audio_path}")
+                else:
+                    print(f"Skipping {lang} audio generation - no English text available")
+            except Exception as e:
+                print(f"Failed to generate {lang} audio: {e}")
+                # Continue with other languages even if one fails
+        
+        # Ensure we have at least one audio file
+        if not fallback_audio_files:
+            # Generate a default audio if nothing else works
+            default_text = english_text if english_text else "No text available"
+            default_audio_path = await generate_audio_file(default_text, "English")
+            fallback_audio_files.append(default_audio_path)
+            print(f"Generated default audio: {default_audio_path}")
+        
+        # Merge all language audio files in sequence
+        if len(fallback_audio_files) > 1:
+            merged_path = await merge_audio_files(fallback_audio_files)
             return merged_path
-        elif len(audio_files) == 1:
-            return audio_files[0]
+        elif len(fallback_audio_files) == 1:
+            return fallback_audio_files[0]
         else:
             raise Exception("No audio files found or generated")
             
@@ -1028,32 +1088,220 @@ async def generate_merged_audio(spoken_text: str, english_text: str, language: s
         print(f"Error generating merged audio: {str(e)}")
         raise e
 
-async def find_existing_audio_file(word: str, language: str) -> str:
+def convert_digits_to_words(text: str) -> str:
     """
-    Find existing audio file for a word in a specific language
+    Convert digits in text to their word equivalents for better audio file matching
+    """
+    import re
+    # Replace individual digits with their word equivalents
+    digit_mapping = {
+        '0': 'zero',
+        '1': 'one',
+        '2': 'two',
+        '3': 'three',
+        '4': 'four',
+        '5': 'five',
+        '6': 'six',
+        '7': 'seven',
+        '8': 'eight',
+        '9': 'nine'
+    }
+    
+    # Use regex to find and replace digits while preserving other characters
+    def replace_digit(match):
+        digit = match.group(0)
+        return digit_mapping.get(digit, digit)
+    
+    # Replace digits with words
+    processed_text = re.sub(r'\d', replace_digit, text)
+    return processed_text
+
+async def find_complete_audio_file(english_text: str) -> str:
+    """
+    Find complete audio file from Audio Files database that matches the English text
     """
     try:
-        # Look in the audio files directory
-        audio_files_dir = "/var/www/audio_files"
+        from database import SessionLocal
         
-        if not os.path.exists(audio_files_dir):
+        print(f"Searching for complete audio file for text: '{english_text}'")
+        
+        db = SessionLocal()
+        try:
+            # Clean the search text and convert digits to words
+            search_text = convert_digits_to_words(english_text.strip().lower())
+            print(f"Processed search text (digits converted to words): '{search_text}'")
+            
+            # Search for exact match first
+            audio_file = db.query(AudioFile).filter(
+                AudioFile.english_text.ilike(f"%{search_text}%"),
+                AudioFile.is_active == True,
+                AudioFile.template_id.is_(None)  # Only from Audio Files page, not from templates
+            ).first()
+            
+            if audio_file:
+                print(f"Found matching audio file ID: {audio_file.id}")
+                print(f"Matched text: '{audio_file.english_text}'")
+                
+                # Return the English audio path if available
+                if audio_file.english_audio_path:
+                    full_path = f"/var/www{audio_file.english_audio_path}"
+                    if os.path.exists(full_path):
+                        print(f"Found complete audio file: {full_path}")
+                        return full_path
+                    else:
+                        print(f"Audio file not found on disk: {full_path}")
+                
+                # If English audio not available, try other languages
+                for lang_path in [audio_file.marathi_audio_path, audio_file.hindi_audio_path, audio_file.gujarati_audio_path]:
+                    if lang_path:
+                        full_path = f"/var/www{lang_path}"
+                        if os.path.exists(full_path):
+                            print(f"Found complete audio file in other language: {full_path}")
+                            return full_path
+            
+            # If no exact match, try searching for individual words
+            print("No exact match found, trying word-based search...")
+            words = search_text.split()
+            
+            # Look for audio files that contain most of the words
+            best_match = None
+            best_score = 0
+            
+            audio_files = db.query(AudioFile).filter(
+                AudioFile.is_active == True,
+                AudioFile.template_id.is_(None)
+            ).all()
+            
+            for af in audio_files:
+                # Convert digits to words in database text for comparison
+                af_text = convert_digits_to_words(af.english_text.lower())
+                matching_words = sum(1 for word in words if word in af_text)
+                score = matching_words / len(words) if words else 0
+                
+                if score > best_score and score >= 0.5:  # At least 50% match
+                    best_score = score
+                    best_match = af
+                    print(f"Found partial match (score: {score:.2f}): '{af.english_text}'")
+            
+            if best_match:
+                print(f"Using best partial match ID: {best_match.id}")
+                if best_match.english_audio_path:
+                    full_path = f"/var/www{best_match.english_audio_path}"
+                    if os.path.exists(full_path):
+                        print(f"Found partial match audio file: {full_path}")
+                        return full_path
+            
+            print("No complete or partial audio file found in database")
+            return None
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"Error finding complete audio file: {str(e)}")
+        return None
+
+async def find_existing_audio_file(word: str, language: str) -> str:
+    """
+    Find existing audio file for a word in a specific language from the Audio Files database
+    """
+    try:
+        from database import SessionLocal
+        
+        # Convert digits to words in the search term
+        word_lower = convert_digits_to_words(word.lower().strip())
+        
+        print(f"Searching for word '{word}' (processed as '{word_lower}') in language '{language}'")
+        
+        # Language mapping for database search
+        language_mapping = {
+            "English": "english",
+            "Hindi": "hindi", 
+            "Marathi": "marathi",
+            "Gujarati": "gujarati"
+        }
+        
+        # Get the language field name for the database
+        language_field = language_mapping.get(language)
+        if not language_field:
+            print(f"Unsupported language: {language}")
             return None
         
-        # Search for audio files with the word and language
-        for filename in os.listdir(audio_files_dir):
-            if filename.lower().endswith(('.mp3', '.wav', '.m4a')):
-                # Check if filename contains the word and language
-                filename_lower = filename.lower()
-                word_lower = word.lower()
-                language_lower = language.lower()
+        db = SessionLocal()
+        try:
+            # Search for exact word match in the Audio Files database
+            audio_file = db.query(AudioFile).filter(
+                AudioFile.english_text.ilike(f"%{word_lower}%"),
+                AudioFile.is_active == True,
+                AudioFile.template_id.is_(None)  # Only from Audio Files page, not from templates
+            ).first()
+            
+            if audio_file:
+                print(f"Found matching audio file ID: {audio_file.id}")
+                print(f"Matched text: '{audio_file.english_text}'")
                 
-                if word_lower in filename_lower and language_lower in filename_lower:
-                    file_path = os.path.join(audio_files_dir, filename)
-                    if os.path.exists(file_path):
-                        print(f"Found existing audio file: {file_path}")
-                        return file_path
-        
-        return None
+                # Get the audio path for the requested language
+                audio_path_field = f"{language_field}_audio_path"
+                audio_path = getattr(audio_file, audio_path_field, None)
+                
+                if audio_path:
+                    # Convert database path to full file system path
+                    full_path = f"/var/www{audio_path}"
+                    if os.path.exists(full_path):
+                        file_size = os.path.getsize(full_path)
+                        if file_size > 1000:  # Ensure file is not empty
+                            print(f"Found existing audio file: {full_path} ({file_size} bytes)")
+                            print(f"  - Word match: '{word_lower}' found in database text: '{audio_file.english_text}'")
+                            print(f"  - Language: {language} audio path: {audio_path}")
+                            return full_path
+                        else:
+                            print(f"Found audio file but it's too small: {full_path} ({file_size} bytes)")
+                    else:
+                        print(f"Audio file not found on disk: {full_path}")
+                else:
+                    print(f"No {language} audio path found for audio file ID: {audio_file.id}")
+            
+            # If no exact match, try partial word matching
+            print(f"No exact match found for '{word_lower}', trying partial matching...")
+            
+            # Search for audio files that contain the word
+            audio_files = db.query(AudioFile).filter(
+                AudioFile.is_active == True,
+                AudioFile.template_id.is_(None)
+            ).all()
+            
+            best_match = None
+            best_score = 0
+            
+            for af in audio_files:
+                af_text = af.english_text.lower()
+                # Check if the word is contained in the audio file text
+                if word_lower in af_text:
+                    # Calculate a simple score based on text length (shorter = better match)
+                    score = 1.0 / len(af_text)
+                    if score > best_score:
+                        best_score = score
+                        best_match = af
+                        print(f"Found partial match (score: {score:.3f}): '{af.english_text}'")
+            
+            if best_match:
+                print(f"Using best partial match ID: {best_match.id}")
+                audio_path_field = f"{language_field}_audio_path"
+                audio_path = getattr(best_match, audio_path_field, None)
+                
+                if audio_path:
+                    full_path = f"/var/www{audio_path}"
+                    if os.path.exists(full_path):
+                        file_size = os.path.getsize(full_path)
+                        if file_size > 1000:
+                            print(f"Found partial match audio file: {full_path} ({file_size} bytes)")
+                            return full_path
+            
+            print(f"No existing audio file found for '{word}' in {language}")
+            return None
+            
+        finally:
+            db.close()
         
     except Exception as e:
         print(f"Error finding existing audio file for '{word}' in {language}: {str(e)}")
@@ -1061,44 +1309,95 @@ async def find_existing_audio_file(word: str, language: str) -> str:
 
 async def merge_audio_files(audio_paths: list) -> str:
     """
-    Merge multiple audio files into one
+    Merge multiple audio files into one with proper format handling
     """
     try:
-        # Create output filename
+        # Create merged_speech_to_isl directory if it doesn't exist
+        merged_dir = "/var/www/audio_files/merged_speech_to_isl"
+        os.makedirs(merged_dir, exist_ok=True)
+        
+        # Create output filename (use MP3 instead of WAV for better compatibility)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"merged_audio_{timestamp}.wav"
-        output_path = f"/var/www/audio_files/{output_filename}"
+        output_filename = f"merged_speech_to_isl_{timestamp}.mp3"
+        output_path = f"{merged_dir}/{output_filename}"
         
-        # Create filter complex for concatenation
-        filter_complex = "concat=n=" + str(len(audio_paths)) + ":v=0:a=1"
+        # Validate all input files exist and have content
+        valid_paths = []
+        for path in audio_paths:
+            if os.path.exists(path):
+                file_size = os.path.getsize(path)
+                if file_size > 1000:  # Ensure file has meaningful content
+                    valid_paths.append(path)
+                    print(f"Valid audio file: {path} ({file_size} bytes)")
+                else:
+                    print(f"Warning: Audio file too small: {path} ({file_size} bytes)")
+            else:
+                print(f"Warning: Audio file not found: {path}")
         
-        # Build ffmpeg command
-        cmd = [
-            "ffmpeg", "-y",  # Overwrite output
-            "-i", audio_paths[0],  # First input
+        if not valid_paths:
+            raise Exception("No valid audio files found for merging")
+        
+        if len(valid_paths) == 1:
+            # If only one file, convert it to MP3
+            convert_cmd = [
+                "ffmpeg", "-y",
+                "-i", valid_paths[0],
+                "-acodec", "mp3",
+                "-ab", "128k",
+                "-ar", "44100",
+                "-ac", "1",
+                output_path
+            ]
+            
+            print(f"Converting single file to MP3: {valid_paths[0]}")
+            result = subprocess.run(convert_cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                print(f"FFmpeg conversion error: {result.stderr}")
+                raise Exception(f"FFmpeg conversion failed: {result.stderr}")
+            
+            # Verify the converted file has content
+            if os.path.getsize(output_path) < 1000:
+                raise Exception("Converted audio file is too small, may be empty")
+            
+            print(f"Single audio file converted to MP3: {output_path}")
+            return output_path
+        
+        # For multiple files, use filter_complex to merge and convert to MP3
+        inputs = []
+        filter_parts = []
+        
+        for i, path in enumerate(valid_paths):
+            inputs.extend(["-i", path])
+            filter_parts.append(f"[{i}:0]")
+        
+        # Create filter to concatenate and convert to MP3
+        filter_complex = "".join(filter_parts) + f"concat=n={len(valid_paths)}:v=0:a=1[out]"
+        
+        merge_cmd = [
+            "ffmpeg", "-y"
+        ] + inputs + [
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+            "-acodec", "mp3",
+            "-ab", "128k",
+            "-ar", "44100",
+            "-ac", "1",
+            output_path
         ]
         
-        # Add additional inputs
-        for path in audio_paths[1:]:
-            cmd.extend(["-i", path])
-        
-        # Add output options
-        cmd.extend([
-            "-filter_complex", filter_complex,
-            "-acodec", "pcm_s16le",  # WAV format
-            output_path
-        ])
-        
-        print(f"Running ffmpeg command: {' '.join(cmd)}")
-        
-        # Execute ffmpeg
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        print(f"Running merge command: {' '.join(merge_cmd)}")
+        result = subprocess.run(merge_cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr}")
-            raise Exception(f"FFmpeg failed: {result.stderr}")
+            print(f"FFmpeg merge error: {result.stderr}")
+            raise Exception(f"FFmpeg merge failed: {result.stderr}")
         
-        print(f"Audio merged successfully: {output_path}")
+        # Verify the output file has content
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+            raise Exception("Merged audio file is too small or empty")
+        
+        print(f"Audio merged successfully: {output_path} ({os.path.getsize(output_path)} bytes)")
         return output_path
         
     except Exception as e:
@@ -1224,6 +1523,67 @@ async def cleanup_publish_isl_directory():
         print(f"❌ Error during publish_isl cleanup: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clean up publish_isl directory: {str(e)}")
 
+@app.delete("/api/cleanup-merged-speech-isl")
+async def cleanup_merged_speech_isl_directory():
+    """
+    Clean up old files in the merged_speech_to_isl directory to prevent disk space issues
+    """
+    try:
+        import glob
+        from datetime import datetime, timedelta
+        
+        # Get current time
+        now = datetime.now()
+        
+        # Calculate cutoff time (24 hours ago)
+        cutoff_time = now - timedelta(hours=24)
+        
+        # Clean up merged_speech_to_isl directory
+        merged_dir = "/var/www/audio_files/merged_speech_to_isl"
+        
+        if not os.path.exists(merged_dir):
+            return {
+                "success": True,
+                "message": "Merged speech-to-ISL directory does not exist.",
+                "files_deleted": 0
+            }
+        
+        print(f"🧹 Cleaning up merged speech-to-ISL directory: {merged_dir}")
+        
+        # Find all files in the directory
+        files = glob.glob(os.path.join(merged_dir, "*"))
+        
+        total_deleted = 0
+        
+        for file_path in files:
+            try:
+                # Get file modification time
+                file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                
+                # Delete files older than 24 hours
+                if file_mtime < cutoff_time:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"🗑️ Deleted old merged audio file: {os.path.basename(file_path)}")
+                        total_deleted += 1
+            except Exception as e:
+                print(f"❌ Error deleting file {os.path.basename(file_path)}: {e}")
+                continue
+        
+        print(f"✅ Merged speech-to-ISL cleanup completed. Deleted {total_deleted} old audio files.")
+        
+        return {
+            "success": True,
+            "message": f"Merged speech-to-ISL cleanup completed. Deleted {total_deleted} old audio files.",
+            "files_deleted": total_deleted
+        }
+        
+    except Exception as e:
+        print(f"❌ Error during merged speech-to-ISL cleanup: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Merged speech-to-ISL cleanup failed: {str(e)}")
+
+
+
 # Mount static files for audio serving
 try:
     app.mount("/audio_files", StaticFiles(directory="/var/www/audio_files"), name="audio_files")
@@ -1332,6 +1692,101 @@ async def serve_audio_file_api(filename: str):
         print(f"Error serving audio file {filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to serve audio file: {str(e)}")
 
+# Speech-to-ISL merged audio file serving endpoint
+@app.get("/api/speech-isl-audio/{filename}")
+async def serve_speech_isl_audio(filename: str):
+    """
+    Serve Speech-to-ISL merged audio files from the /var/www/audio_files/merged_speech_to_isl directory
+    """
+    try:
+        file_path = f"/var/www/audio_files/merged_speech_to_isl/{filename}"
+        
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail=f"Speech-to-ISL audio file not found: {filename}")
+        
+        # Check file size and provide debug info
+        file_size = os.path.getsize(file_path)
+        print(f"Serving audio file: {filename}, size: {file_size} bytes")
+        
+        if file_size < 1000:
+            print(f"Warning: Audio file is very small: {filename} ({file_size} bytes)")
+        
+        # Determine MIME type based on file extension
+        if filename.lower().endswith('.mp3'):
+            media_type = "audio/mpeg"
+        elif filename.lower().endswith('.wav'):
+            media_type = "audio/wav"
+        else:
+            media_type = "audio/mpeg"  # Default to MP3
+        
+        return FileResponse(
+            path=file_path,
+            media_type=media_type,
+            filename=filename
+        )
+        
+    except Exception as e:
+        print(f"Error serving Speech-to-ISL audio file {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to serve Speech-to-ISL audio file: {str(e)}")
+
+@app.get("/api/debug-audio/{filename}")
+async def debug_audio_file(filename: str):
+    """
+    Debug endpoint to check audio file information
+    """
+    try:
+        file_path = f"/var/www/audio_files/merged_speech_to_isl/{filename}"
+        
+        if not os.path.exists(file_path):
+            return {
+                "error": "File not found",
+                "filename": filename,
+                "path": file_path
+            }
+        
+        file_size = os.path.getsize(file_path)
+        
+        # Try to get audio file info using ffprobe
+        try:
+            probe_cmd = [
+                "ffprobe", "-v", "quiet", "-print_format", "json",
+                "-show_format", "-show_streams", file_path
+            ]
+            result = subprocess.run(probe_cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                import json
+                audio_info = json.loads(result.stdout)
+                return {
+                    "filename": filename,
+                    "file_size": file_size,
+                    "file_size_mb": round(file_size / (1024 * 1024), 2),
+                    "audio_info": audio_info,
+                    "is_valid": file_size > 1000
+                }
+            else:
+                return {
+                    "filename": filename,
+                    "file_size": file_size,
+                    "file_size_mb": round(file_size / (1024 * 1024), 2),
+                    "ffprobe_error": result.stderr,
+                    "is_valid": file_size > 1000
+                }
+        except Exception as e:
+            return {
+                "filename": filename,
+                "file_size": file_size,
+                "file_size_mb": round(file_size / (1024 * 1024), 2),
+                "ffprobe_error": str(e),
+                "is_valid": file_size > 1000
+            }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "filename": filename
+        }
+
 # Fallback audio file serving endpoint
 @app.get("/audio_files/{filename}")
 async def serve_audio_file(filename: str):
@@ -1347,6 +1802,78 @@ async def serve_audio_file(filename: str):
         media_type="audio/mpeg",
         filename=filename
     )
+
+@app.get("/api/test-audio-generation")
+async def test_audio_generation():
+    """
+    Test endpoint to generate a simple audio file to verify audio generation is working
+    """
+    try:
+        # Create merged_speech_to_isl directory if it doesn't exist
+        merged_dir = "/var/www/audio_files/merged_speech_to_isl"
+        os.makedirs(merged_dir, exist_ok=True)
+        
+        # Generate a simple test audio file
+        test_text = "This is a test audio file for speech to ISL"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        test_filename = f"test_audio_{timestamp}.mp3"
+        test_path = f"{merged_dir}/{test_filename}"
+        
+        # Use ffmpeg to generate a simple test audio using text-to-speech
+        test_cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"aevalsrc='sin(440*2*PI*t)':s=44100:d=3",
+            "-acodec", "mp3",
+            "-ab", "128k",
+            "-ar", "44100",
+            "-ac", "1",
+            test_path
+        ]
+        
+        print(f"Generating test audio: {' '.join(test_cmd)}")
+        result = subprocess.run(test_cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"Test audio generation error: {result.stderr}")
+            return {
+                "success": False,
+                "error": f"Failed to generate test audio: {result.stderr}"
+            }
+        
+        # Check if file was created and has content
+        if not os.path.exists(test_path):
+            return {
+                "success": False,
+                "error": "Test audio file was not created"
+            }
+        
+        file_size = os.path.getsize(test_path)
+        if file_size < 1000:
+            return {
+                "success": False,
+                "error": f"Test audio file is too small: {file_size} bytes"
+            }
+        
+        # Return the test audio URL
+        test_url = f"/translation-api/api/speech-isl-audio/{test_filename}"
+        
+        return {
+            "success": True,
+            "message": "Test audio generated successfully",
+            "filename": test_filename,
+            "file_size": file_size,
+            "file_size_mb": round(file_size / (1024 * 1024), 2),
+            "audio_url": test_url,
+            "full_path": test_path
+        }
+        
+    except Exception as e:
+        print(f"Error in test audio generation: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn

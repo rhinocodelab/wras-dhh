@@ -120,6 +120,10 @@ sudo mkdir -p /var/www/isl_dataset
 print_status "Creating publish_isl directory..."
 sudo mkdir -p /var/www/publish_isl
 
+# Create final speech to isl directory
+print_status "Creating final speech to isl directory..."
+sudo mkdir -p /var/www/final_speech_isl_vid
+
 # Set proper permissions for ISL video directories
 print_status "Setting permissions for ISL video directories..."
 # Get current user and group
@@ -130,9 +134,11 @@ CURRENT_GROUP=$(id -gn)
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_isl_vid
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/isl_dataset
 sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/publish_isl
+sudo chown -R $CURRENT_USER:$CURRENT_GROUP /var/www/final_speech_isl_vid
 sudo chmod -R 775 /var/www/final_isl_vid
 sudo chmod -R 775 /var/www/isl_dataset
 sudo chmod -R 775 /var/www/publish_isl
+sudo chmod -R 775 /var/www/final_speech_isl_vid
 
 # Add www-data user to the current user's group for write access
 sudo usermod -a -G $CURRENT_GROUP www-data
