@@ -21,6 +21,9 @@ from routes import audio_files
 from routes import announcement_audio
 from routes import final_announcement
 from routes import publish_isl
+from routes import publish_speech_isl
+from routes import text_to_isl
+from utils.isl_utils import generate_isl_video_from_text, generate_merged_audio, convert_digits_to_words
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -411,6 +414,8 @@ app.include_router(announcement_audio.router, prefix="/api", tags=["announcement
 # Include final announcement routes
 app.include_router(final_announcement.router, prefix="/api", tags=["final-announcement"])
 app.include_router(publish_isl.router, prefix="/api", tags=["publish-isl"])
+app.include_router(publish_speech_isl.router, prefix="/api", tags=["publish-speech-isl"])
+app.include_router(text_to_isl.router, prefix="/api", tags=["text-to-isl"])
 
 @app.post("/generate-isl-video")
 async def generate_isl_video(request: ISLVideoRequest):
@@ -765,14 +770,14 @@ async def speech_to_isl(request: SpeechToISLRequest):
         print(f"Generated announcement text: {announcement_text}")
         
         # Generate ISL video
-        isl_video_path = await generate_isl_video_from_text(isl_text)
+        isl_video_path = await generate_isl_video_from_text(isl_text, "/var/www/final_speech_isl_vid")
         
         # Generate merged audio
         audio_path = await generate_merged_audio(request.spoken_text, request.english_text, spoken_language)
         
         # Create response URLs (relative paths that will be proxied)
-        video_url = f"/translation-api/api/speech-isl-video/{isl_video_path}" if isl_video_path else ""
-        audio_url = f"/translation-api/api/speech-isl-audio/{os.path.basename(audio_path)}" if audio_path else ""
+        video_url = f"/api/speech-isl-video/{isl_video_path}" if isl_video_path else ""
+        audio_url = f"/api/speech-isl-audio/{os.path.basename(audio_path)}" if audio_path else ""
         
         return SpeechToISLResponse(
             success=True,
@@ -785,136 +790,9 @@ async def speech_to_isl(request: SpeechToISLRequest):
         print(f"❌ Error in speech-to-isl: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Speech-to-ISL failed: {str(e)}")
 
-async def generate_isl_video_from_text(text: str) -> str:
-    """
-    Generate ISL video from text and save to /var/www/final_speech_isl_vid/
-    """
-    try:
-        print(f"Generating ISL video for text: {text}")
-        
-        # Step 1: Convert text to lowercase
-        text = text.lower().strip()
-        
-        # Step 2: Split text into words
-        words = text.split()
-        
-        # Step 3: Find matching videos in isl_dataset
-        isl_dataset_path = "isl_dataset"
-        available_videos = []
-        
-        print(f"Looking for videos in: {os.path.abspath(isl_dataset_path)}")
-        print(f"Words to find: {words}")
-        
-        for word in words:
-            # Check if word folder exists in isl_dataset
-            word_folder = os.path.join(isl_dataset_path, word)
-            print(f"Checking folder: {word_folder}")
-            
-            if os.path.exists(word_folder):
-                # Look for mp4 files in the folder
-                for file in os.listdir(word_folder):
-                    if file.endswith('.mp4'):
-                        video_path = os.path.join(word_folder, file)
-                        available_videos.append(video_path)
-                        print(f"Found video: {video_path}")
-                        break  # Use first mp4 file found
-            else:
-                print(f"Word '{word}' not found in ISL dataset, skipping...")
-        
-        print(f"Total available videos found: {len(available_videos)}")
-        print(f"Available videos: {available_videos}")
-        
-        if not available_videos:
-            raise Exception(f"No matching ISL videos found for the given text. Available words in dataset: {', '.join(os.listdir(isl_dataset_path))}")
-        
-        # Step 4: Generate unique output filename
-        import hashlib
-        import time
-        text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
-        timestamp = int(time.time())
-        output_filename = f"speech_isl_{text_hash}_{timestamp}.mp4"
-        
-        # Create final_speech_isl_vid directory if it doesn't exist
-        final_speech_isl_vid_dir = "/var/www/final_speech_isl_vid"
-        try:
-            os.makedirs(final_speech_isl_vid_dir, exist_ok=True)
-            # Test write permissions
-            test_file = os.path.join(final_speech_isl_vid_dir, "test_write.tmp")
-            with open(test_file, 'w') as f:
-                f.write("test")
-            os.remove(test_file)
-        except PermissionError:
-            raise Exception(f"Permission denied: Cannot write to {final_speech_isl_vid_dir}. Please check directory permissions.")
-        except Exception as e:
-            raise Exception(f"Error creating directory {final_speech_isl_vid_dir}: {str(e)}")
-        
-        output_path = os.path.join(final_speech_isl_vid_dir, output_filename)
-        
-        # Step 5: Use ffmpeg to concatenate videos
-        try:
-            import subprocess
-            
-            # Create a temporary file list for ffmpeg
-            temp_list_file = f"temp_speech_isl_list_{timestamp}.txt"
-            with open(temp_list_file, 'w') as f:
-                for video_path in available_videos:
-                    f.write(f"file '{video_path}'\n")
-            
-            # Run ffmpeg command to concatenate videos
-            ffmpeg_cmd = [
-                'ffmpeg',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', temp_list_file,
-                '-c', 'copy',
-                output_path,
-                '-y'  # Overwrite output file if it exists
-            ]
-            
-            print(f"Running FFmpeg command: {' '.join(ffmpeg_cmd)}")
-            print(f"Temp list file content:")
-            with open(temp_list_file, 'r') as f:
-                print(f.read())
-            
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-            
-            print(f"FFmpeg return code: {result.returncode}")
-            if result.stdout:
-                print(f"FFmpeg stdout: {result.stdout}")
-            if result.stderr:
-                print(f"FFmpeg stderr: {result.stderr}")
-            
-            # Clean up temporary file
-            os.remove(temp_list_file)
-            
-            if result.returncode != 0:
-                print(f"FFmpeg error: {result.stderr}")
-                error_msg = f"FFmpeg failed with return code {result.returncode}"
-                if "Permission denied" in result.stderr:
-                    error_msg = f"Permission denied: Cannot write to output directory. Please check permissions for {final_speech_isl_vid_dir}"
-                elif "No such file or directory" in result.stderr:
-                    error_msg = "Some input video files not found in ISL dataset"
-                else:
-                    error_msg = f"FFmpeg error: {result.stderr[:200]}..."  # Truncate long error messages
-                raise Exception(error_msg)
-            
-            # Return the video filename
-            if os.path.exists(output_path):
-                print(f"ISL video generated successfully: {output_path}")
-                return output_filename
-            else:
-                raise Exception("Generated video file not found")
-                
-        except subprocess.SubprocessError as e:
-            raise Exception(f"FFmpeg processing error: {str(e)}")
-        except Exception as e:
-            raise Exception(f"Video generation error: {str(e)}")
-            
-    except Exception as e:
-        print(f"Error generating ISL video: {str(e)}")
-        raise e
 
-async def generate_audio_file(text: str, language: str) -> str:
+
+# async def generate_audio_file(text: str, language: str) -> str:
     """
     Generate audio file from text and save to disk
     """
@@ -980,7 +858,7 @@ async def generate_audio_file(text: str, language: str) -> str:
         print(f"Error generating audio file: {str(e)}")
         raise e
 
-async def generate_merged_audio(spoken_text: str, english_text: str, language: str) -> str:
+# async def generate_merged_audio(spoken_text: str, english_text: str, language: str) -> str:
     """
     Generate merged audio file using existing audio files from Audio Files page
     """
@@ -1088,35 +966,35 @@ async def generate_merged_audio(spoken_text: str, english_text: str, language: s
         print(f"Error generating merged audio: {str(e)}")
         raise e
 
-def convert_digits_to_words(text: str) -> str:
-    """
-    Convert digits in text to their word equivalents for better audio file matching
-    """
-    import re
-    # Replace individual digits with their word equivalents
-    digit_mapping = {
-        '0': 'zero',
-        '1': 'one',
-        '2': 'two',
-        '3': 'three',
-        '4': 'four',
-        '5': 'five',
-        '6': 'six',
-        '7': 'seven',
-        '8': 'eight',
-        '9': 'nine'
-    }
-    
-    # Use regex to find and replace digits while preserving other characters
-    def replace_digit(match):
-        digit = match.group(0)
-        return digit_mapping.get(digit, digit)
-    
-    # Replace digits with words
-    processed_text = re.sub(r'\d', replace_digit, text)
-    return processed_text
+# def convert_digits_to_words(text: str) -> str:
+#     """
+#     Convert digits in text to their word equivalents for better audio file matching
+#     """
+#     import re
+#     # Replace individual digits with their word equivalents
+#     digit_mapping = {
+#         '0': 'zero',
+#         '1': 'one',
+#         '2': 'two',
+#         '3': 'three',
+#         '4': 'four',
+#         '5': 'five',
+#         '6': 'six',
+#         '7': 'seven',
+#         '8': 'eight',
+#         '9': 'nine'
+#     }
+#     
+#     # Use regex to find and replace digits while preserving other characters
+#     def replace_digit(match):
+#         digit = match.group(0)
+#         return digit_mapping.get(digit, digit)
+#     
+#     # Replace digits with words
+#     processed_text = re.sub(r'\d', replace_digit, text)
+#     return processed_text
 
-async def find_complete_audio_file(english_text: str) -> str:
+# async def find_complete_audio_file(english_text: str) -> str:
     """
     Find complete audio file from Audio Files database that matches the English text
     """
@@ -1201,7 +1079,7 @@ async def find_complete_audio_file(english_text: str) -> str:
         print(f"Error finding complete audio file: {str(e)}")
         return None
 
-async def find_existing_audio_file(word: str, language: str) -> str:
+# async def find_existing_audio_file(word: str, language: str) -> str:
     """
     Find existing audio file for a word in a specific language from the Audio Files database
     """
@@ -1307,7 +1185,7 @@ async def find_existing_audio_file(word: str, language: str) -> str:
         print(f"Error finding existing audio file for '{word}' in {language}: {str(e)}")
         return None
 
-async def merge_audio_files(audio_paths: list) -> str:
+# async def merge_audio_files(audio_paths: list) -> str:
     """
     Merge multiple audio files into one with proper format handling
     """
@@ -1586,6 +1464,7 @@ async def cleanup_merged_speech_isl_directory():
 
 # Mount static files for audio serving
 try:
+    os.makedirs("/var/www/audio_files", exist_ok=True)
     app.mount("/audio_files", StaticFiles(directory="/var/www/audio_files"), name="audio_files")
     print("✅ Audio files mounted at /audio_files")
 except Exception as e:
@@ -1602,11 +1481,30 @@ except Exception as e:
 
 # Mount static files for final ISL videos
 try:
+    os.makedirs("/var/www/final_isl_vid", exist_ok=True)
     app.mount("/final_isl_vid", StaticFiles(directory="/var/www/final_isl_vid"), name="final_isl_vid")
     print("✅ Final ISL videos mounted at /final_isl_vid")
 except Exception as e:
     print(f"⚠️ Could not mount final ISL videos: {e}")
     print("Final ISL videos will not be available")
+
+# Mount static files for Speech-to-ISL videos
+try:
+    os.makedirs("/var/www/final_speech_isl_vid", exist_ok=True)
+    app.mount("/final_speech_isl_vid", StaticFiles(directory="/var/www/final_speech_isl_vid"), name="final_speech_isl_vid")
+    print("✅ Speech-to-ISL videos mounted at /final_speech_isl_vid")
+except Exception as e:
+    print(f"⚠️ Could not mount Speech-to-ISL videos: {e}")
+    print("Speech-to-ISL videos will not be available")
+
+# Mount static files for Text-to-ISL videos
+try:
+    os.makedirs("/var/www/final_text_isl_vid", exist_ok=True)
+    app.mount("/final_text_isl_vid", StaticFiles(directory="/var/www/final_text_isl_vid"), name="final_text_isl_vid")
+    print("✅ Text-to-ISL videos mounted at /final_text_isl_vid")
+except Exception as e:
+    print(f"⚠️ Could not mount Text-to-ISL videos: {e}")
+    print("Text-to-ISL videos will not be available")
 
 # Mount static files for published ISL announcements
 publish_isl_mounted = False
@@ -1614,6 +1512,9 @@ possible_publish_dirs = ["/var/www/publish_isl", "./publish_isl", "/tmp/publish_
 
 for publish_dir in possible_publish_dirs:
     try:
+        # Create directory if it doesn't exist
+        os.makedirs(publish_dir, exist_ok=True)
+        
         if os.path.exists(publish_dir):
             app.mount("/publish_isl", StaticFiles(directory=publish_dir), name="publish_isl")
             print(f"✅ Published ISL announcements mounted at /publish_isl from {publish_dir}")
@@ -1625,6 +1526,48 @@ for publish_dir in possible_publish_dirs:
 
 if not publish_isl_mounted:
     print("❌ No publish directory could be mounted. Published ISL announcements will not be available")
+
+# Mount static files for published Speech to ISL HTML files
+publish_speech_isl_mounted = False
+possible_publish_speech_isl_dirs = ["/var/www/publish_speech_isl", "./publish_speech_isl", "/tmp/publish_speech_isl"]
+
+for publish_dir in possible_publish_speech_isl_dirs:
+    try:
+        # Create directory if it doesn't exist
+        os.makedirs(publish_dir, exist_ok=True)
+        
+        if os.path.exists(publish_dir):
+            app.mount("/publish_speech_isl", StaticFiles(directory=publish_dir), name="publish_speech_isl")
+            print(f"✅ Published Speech to ISL HTML files mounted at /publish_speech_isl from {publish_dir}")
+            publish_speech_isl_mounted = True
+            break
+    except Exception as e:
+        print(f"⚠️ Could not mount published Speech to ISL HTML files from {publish_dir}: {e}")
+        continue
+
+if not publish_speech_isl_mounted:
+    print("❌ No publish_speech_isl directory could be mounted. Published Speech to ISL HTML files will not be available")
+
+# Mount static files for published Text to ISL HTML files
+publish_text_isl_mounted = False
+possible_publish_text_isl_dirs = ["/var/www/publish_text_isl", "./publish_text_isl", "/tmp/publish_text_isl"]
+
+for publish_dir in possible_publish_text_isl_dirs:
+    try:
+        # Create directory if it doesn't exist
+        os.makedirs(publish_dir, exist_ok=True)
+        
+        if os.path.exists(publish_dir):
+            app.mount("/publish_text_isl", StaticFiles(directory=publish_dir), name="publish_text_isl")
+            print(f"✅ Published Text to ISL HTML files mounted at /publish_text_isl from {publish_dir}")
+            publish_text_isl_mounted = True
+            break
+    except Exception as e:
+        print(f"⚠️ Could not mount published Text to ISL HTML files from {publish_dir}: {e}")
+        continue
+
+if not publish_text_isl_mounted:
+    print("❌ No publish_text_isl directory could be mounted. Published Text to ISL HTML files will not be available")
 
 # ISL Video serving endpoint
 @app.get("/api/isl-video/{filename}")
@@ -1657,7 +1600,19 @@ async def serve_speech_isl_video(filename: str):
     try:
         file_path = f"/var/www/final_speech_isl_vid/{filename}"
         
+        print(f"🔍 Looking for video file: {file_path}")
+        
         if not os.path.exists(file_path):
+            print(f"❌ Video file not found: {file_path}")
+            # List files in the directory to see what's available
+            try:
+                if os.path.exists("/var/www/final_speech_isl_vid"):
+                    files = os.listdir("/var/www/final_speech_isl_vid")
+                    print(f"📁 Available files in /var/www/final_speech_isl_vid: {files}")
+                else:
+                    print("❌ Directory /var/www/final_speech_isl_vid does not exist")
+            except Exception as e:
+                print(f"❌ Error listing directory: {e}")
             raise HTTPException(status_code=404, detail=f"Speech-to-ISL video file not found: {filename}")
         
         return FileResponse(
@@ -1701,7 +1656,19 @@ async def serve_speech_isl_audio(filename: str):
     try:
         file_path = f"/var/www/audio_files/merged_speech_to_isl/{filename}"
         
+        print(f"🔍 Looking for audio file: {file_path}")
+        
         if not os.path.exists(file_path):
+            print(f"❌ Audio file not found: {file_path}")
+            # List files in the directory to see what's available
+            try:
+                if os.path.exists("/var/www/audio_files/merged_speech_to_isl"):
+                    files = os.listdir("/var/www/audio_files/merged_speech_to_isl")
+                    print(f"📁 Available files in /var/www/audio_files/merged_speech_to_isl: {files}")
+                else:
+                    print("❌ Directory /var/www/audio_files/merged_speech_to_isl does not exist")
+            except Exception as e:
+                print(f"❌ Error listing directory: {e}")
             raise HTTPException(status_code=404, detail=f"Speech-to-ISL audio file not found: {filename}")
         
         # Check file size and provide debug info

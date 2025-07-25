@@ -444,6 +444,10 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
         console.log('Speech-to-ISL result:', result);
         
         if (result.success) {
+          console.log('Generated video URLs:', { 
+            video_url: result.video_url, 
+            audio_url: result.audio_url 
+          });
           setResultData({
             videoUrl: result.video_url,
             audioUrl: result.audio_url,
@@ -492,6 +496,146 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
         message: error.message || 'Failed to generate ISL video',
         progress: 0,
         isError: true
+      });
+    }
+  };
+
+  const publishISLVideo = async () => {
+    if (!resultData || !resultData.success) {
+      addToast({
+        type: 'error',
+        title: 'No Video Available',
+        message: 'Please generate an ISL video first before publishing'
+      });
+      return;
+    }
+
+    try {
+      // Show progress modal
+      setProgressModal({
+        isOpen: true,
+        title: 'Publishing ISL Video',
+        message: 'Creating HTML page with video and audio...',
+        progress: 10,
+        isError: false
+      });
+
+      // Use the original URLs from the API - the backend will convert them to static file paths
+      const videoUrl = resultData.videoUrl;
+      const audioUrl = resultData.audioUrl;
+
+      console.log('Publishing with original URLs:', { videoUrl, audioUrl });
+      console.log('Publishing with data:', {
+        video_url: videoUrl,
+        audio_url: audioUrl,
+        english_text: englishText || convertedText
+      });
+
+      const response = await fetch(`${TRANSLATION_API_BASE_URL}/api/publish-speech-isl`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          video_url: videoUrl,
+          audio_url: audioUrl,
+          english_text: englishText || convertedText
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Publish ISL result:', result);
+        
+        if (result.success) {
+          // Show success in modal
+          setProgressModal({
+            isOpen: true,
+            title: 'ISL Video Published Successfully',
+            message: 'HTML page created successfully. Opening in new tab...',
+            progress: 100,
+            isError: false
+          });
+
+          // Close modal after 2 seconds
+          setTimeout(() => {
+            setProgressModal(prev => ({ ...prev, isOpen: false }));
+          }, 2000);
+
+          // Open the HTML page in a new tab
+          // Use the direct translation API URL for opening the HTML file
+          const translationApiUrl = import.meta.env.DEV ? 'http://localhost:5001' : 'http://localhost:5001';
+          const htmlUrl = `${translationApiUrl}${result.html_url}`;
+          console.log('Opening HTML URL:', htmlUrl);
+          
+          // Try to open the URL in a new tab
+          const newWindow = window.open(htmlUrl, '_blank');
+          
+          // Also try to fetch the HTML content to verify it's accessible
+          try {
+            const htmlResponse = await fetch(htmlUrl);
+            if (!htmlResponse.ok) {
+              console.error('HTML file not accessible:', htmlResponse.status, htmlResponse.statusText);
+              addToast({
+                type: 'warning',
+                title: 'HTML File Not Accessible',
+                message: 'The published HTML file may not be accessible. Please check the URL: ' + htmlUrl
+              });
+            } else {
+              console.log('HTML file is accessible');
+            }
+          } catch (error) {
+            console.error('Error checking HTML file accessibility:', error);
+          }
+          
+          // If the window is blocked or fails, show a message
+          if (!newWindow) {
+            addToast({
+              type: 'warning',
+              title: 'Popup Blocked',
+              message: 'Please allow popups and try again, or copy this URL: ' + htmlUrl
+            });
+          } else {
+            // Add a small delay to check if the window loaded successfully
+            setTimeout(() => {
+              if (newWindow.closed) {
+                addToast({
+                  type: 'error',
+                  title: 'Page Failed to Load',
+                  message: 'The published page failed to load. Please check the URL: ' + htmlUrl
+                });
+              }
+            }, 2000);
+          }
+
+          addToast({
+            type: 'success',
+            title: 'Video Published',
+            message: 'ISL video has been published and opened in a new tab'
+          });
+        } else {
+          throw new Error(result.message || 'Failed to publish ISL video');
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to publish ISL video');
+      }
+    } catch (error: any) {
+      console.error('Error publishing ISL video:', error);
+      
+      // Show error in modal
+      setProgressModal({
+        isOpen: true,
+        title: 'Publishing Failed',
+        message: error.message || 'Failed to publish ISL video',
+        progress: 0,
+        isError: true
+      });
+
+      addToast({
+        type: 'error',
+        title: 'Publishing Failed',
+        message: error.message || 'Failed to publish ISL video'
       });
     }
   };
@@ -583,9 +727,24 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
   };
 
   const clearAll = async () => {
-    // Clean up generated files on server if they exist
-    if (generatedFiles.videoFile || generatedFiles.audioFile) {
-      try {
+    // Show progress modal during cleanup
+    setProgressModal({
+      isOpen: true,
+      title: 'Clearing All Data',
+      message: 'Cleaning up generated files and published HTML pages...',
+      progress: 10,
+      isError: false
+    });
+
+    try {
+      // Clean up generated files on server if they exist
+      if (generatedFiles.videoFile || generatedFiles.audioFile) {
+        setProgressModal(prev => ({
+          ...prev,
+          message: 'Cleaning up video and audio files...',
+          progress: 30
+        }));
+
         // Clean up video file
         if (generatedFiles.videoFile) {
           await fetch(`${TRANSLATION_API_BASE_URL}/api/cleanup-file`, {
@@ -613,25 +772,67 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
         }
         
         console.log('Generated files cleaned up successfully');
-      } catch (error) {
-        console.error('Error cleaning up generated files:', error);
       }
+
+      // Clean up published HTML files
+      setProgressModal(prev => ({
+        ...prev,
+        message: 'Cleaning up published HTML pages...',
+        progress: 60
+      }));
+
+      await fetch(`${TRANSLATION_API_BASE_URL}/api/cleanup-publish-speech-isl`, {
+        method: 'DELETE'
+      });
+
+      setProgressModal(prev => ({
+        ...prev,
+        message: 'Cleanup completed successfully!',
+        progress: 100
+      }));
+
+      // Wait a moment to show completion
+      setTimeout(() => {
+        setProgressModal({ isOpen: false, title: '', message: '', progress: 0, isError: false });
+      }, 1000);
+
+      // Clear UI state
+      setConvertedText('');
+      setEnglishText('');
+      setVideoUrl('');
+      setIsVideoPlaying(false);
+      setResultData(null);
+      setMicTestResult(''); // Clear microphone test result
+      setGeneratedFiles({}); // Clear generated files tracking
+      
+      addToast({
+        type: 'success',
+        title: 'Cleared Successfully',
+        message: 'All data, generated video, audio, and published HTML pages cleared from server'
+      });
+
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      
+      setProgressModal(prev => ({
+        ...prev,
+        title: 'Cleanup Error',
+        message: 'Some files could not be cleaned up. Please try again.',
+        progress: 0,
+        isError: true
+      }));
+
+      // Wait a moment to show error
+      setTimeout(() => {
+        setProgressModal({ isOpen: false, title: '', message: '', progress: 0, isError: false });
+      }, 2000);
+
+      addToast({
+        type: 'error',
+        title: 'Cleanup Failed',
+        message: 'Some files could not be cleaned up. Please try again.'
+      });
     }
-    
-    // Clear UI state
-    setConvertedText('');
-    setEnglishText('');
-    setVideoUrl('');
-    setIsVideoPlaying(false);
-    setResultData(null);
-    setMicTestResult(''); // Clear microphone test result
-    setGeneratedFiles({}); // Clear generated files tracking
-    
-    addToast({
-      type: 'info',
-      title: 'Cleared',
-      message: 'All data, generated video, and audio cleared from server'
-    });
   };
 
   return (
@@ -660,7 +861,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                   id="language-select"
                   value={selectedLanguage}
                   onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 text-xs"
+                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent bg-white text-gray-900 text-sm"
                 >
                   {languages.map((language) => (
                     <option key={language.value} value={language.value}>
@@ -671,10 +872,10 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                 <button
                   onClick={isRecording ? stopRecording : startRecording}
                   disabled={isProcessing || !isBrowserSupported}
-                  className={`flex items-center justify-center w-10 h-10 rounded-lg font-medium transition-all duration-200 ${
+                  className={`flex items-center justify-center px-3 py-1.5 rounded-none font-medium transition-colors text-sm ${
                     isRecording
-                      ? 'bg-red-500 hover:bg-red-600 text-white'
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-[#337ab7] hover:bg-[#2e6da4] text-white'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                   title={!isBrowserSupported ? 'Audio recording not supported in this browser' : (isRecording ? 'Stop Recording' : 'Start Recording')}
                 >
@@ -694,7 +895,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                 <button
                   onClick={testMicrophone}
                   disabled={isTestingMic}
-                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="px-3 py-1.5 bg-[#337ab7] hover:bg-[#2e6da4] text-white rounded-none transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isTestingMic ? 'Testing...' : 'Test Mic'}
                 </button>
@@ -743,7 +944,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                   value={convertedText}
                   onChange={(e) => setConvertedText(formatTextWithSpaces(e.target.value))}
                   placeholder={`Enter or record text in ${selectedLanguage}...`}
-                  className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 text-sm resize-none"
+                  className="w-full h-24 px-3 py-1.5 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent bg-white text-gray-900 text-sm resize-none"
                   disabled={isProcessing}
                 />
               </div>
@@ -757,7 +958,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                   value={englishText}
                   onChange={(e) => setEnglishText(convertDigitsToWords(removePunctuation(formatTextWithSpaces(e.target.value))))}
                   placeholder="Enter English text for ISL video generation..."
-                  className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 text-sm resize-none"
+                  className="w-full h-24 px-3 py-1.5 border border-gray-300 rounded-none focus:ring-2 focus:ring-[#337ab7] focus:border-transparent bg-white text-gray-900 text-sm resize-none"
                 />
               </div>
 
@@ -808,7 +1009,7 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                   onPause={() => setIsVideoPlaying(false)}
                   onEnded={() => setIsVideoPlaying(false)}
                 >
-                  <source src={videoUrl} type="video/mp4" />
+                  <source src={`${TRANSLATION_API_BASE_URL}${videoUrl}`} type="video/mp4" />
                   Your browser does not support the video tag.
                 </video>
               ) : (
@@ -832,14 +1033,22 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
 
             {/* Generate ISL Video Button */}
             {englishText && (
-              <div className="flex justify-center">
+              <div className="flex justify-center space-x-2">
                 <button
                   onClick={() => generateISLVideo(englishText || convertedText)}
                   disabled={!englishText}
-                  className="px-2 py-1 bg-[#337ab7] text-white rounded-none hover:bg-[#2e6da4] text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 bg-[#337ab7] hover:bg-[#2e6da4] text-white rounded-none transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Generate ISL Video
                 </button>
+                {resultData && resultData.success && (
+                  <button
+                    onClick={() => publishISLVideo()}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none transition-colors text-sm"
+                  >
+                    Publish ISL Video
+                  </button>
+                )}
               </div>
             )}
 
@@ -853,8 +1062,8 @@ export default function SpeechToISL({ onDataChange }: SpeechToISLProps) {
                     controls
                     autoPlay
                   >
-                    <source src={resultData.audioUrl} type="audio/mpeg" />
-                    <source src={resultData.audioUrl} type="audio/wav" />
+                    <source src={`${TRANSLATION_API_BASE_URL}${resultData.audioUrl}`} type="audio/mpeg" />
+                    <source src={`${TRANSLATION_API_BASE_URL}${resultData.audioUrl}`} type="audio/wav" />
                     Your browser does not support the audio tag.
                   </audio>
                 </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, MapPin, Route, LogOut, Menu, X, Train, FileText, Volume2, Hand, Mic } from 'lucide-react';
+import { BarChart3, MapPin, Route, LogOut, Menu, X, Train, FileText, Volume2, Hand, Mic, Type } from 'lucide-react';
 import { User } from '../types';
 
 interface LayoutProps {
@@ -22,6 +22,7 @@ export default function Layout({ children, user, activeTab, onTabChange, onLogou
     { id: 'audio-files', label: 'Audio Files', icon: Volume2 },
     { id: 'isl-dictionary', label: 'ISL Dictionary', icon: Hand },
     { id: 'speech-to-isl', label: 'Speech to ISL', icon: Mic },
+    { id: 'text-to-isl', label: 'Text to ISL', icon: Type },
   ];
 
   return (

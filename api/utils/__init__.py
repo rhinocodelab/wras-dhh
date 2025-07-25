@@ -1,1 +1,1 @@
-# Utils package for audio announcement system 
+# Utility functions for ISL video and audio generation 

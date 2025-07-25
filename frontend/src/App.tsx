@@ -9,6 +9,7 @@ import AudioAnnouncementFiles from './components/AudioAnnouncementFiles';
 import AnnouncementAudios from './components/AnnouncementAudios';
 import ISLDictionary from './components/ISLDictionary';
 import SpeechToISL from './components/SpeechToISL';
+import TextToISL from './components/TextToISL';
 import ToastContainer, { useToast } from './components/ToastContainer';
 import { User, Station, TrainRoute } from './types';
 import { apiService } from './services/api';
@@ -131,6 +132,8 @@ function AppContent() {
         return <ISLDictionary key={islDictionaryKey} />;
       case 'speech-to-isl':
         return <SpeechToISL onDataChange={refreshDashboard} />;
+      case 'text-to-isl':
+        return <TextToISL onDataChange={refreshDashboard} />;
       default:
         return <Dashboard stationCount={stations.length} routeCount={routes.length} />;
     }
